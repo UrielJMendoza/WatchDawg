@@ -2,7 +2,7 @@ import { LogOut } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { StatusPill } from "@/components/status/status-pill";
+import { LiveStatusPill } from "@/components/status/live-status-pill";
 import { signOutAction } from "@/app/(dashboard)/actions";
 
 interface TopbarProps {
@@ -33,7 +33,7 @@ export function Topbar({ userEmail, className }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-4">
-        <StatusPill status="unknown" />
+        <LiveStatusPill />
         {userEmail ? (
           <span className="font-mono text-[0.625rem] uppercase tracking-widest text-muted">
             {userEmail}

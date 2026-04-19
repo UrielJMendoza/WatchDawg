@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { StatusPill } from "@/components/status/status-pill";
+import { LastIngestLabel, LiveStatusPill } from "@/components/status/live-status-pill";
 
 const SECTIONS: { title: string; caption: string }[] = [
   { title: "FEEDS", caption: "Awaiting ingest" },
@@ -31,10 +31,8 @@ export function LeftNav({ className }: { className?: string }) {
       <footer className="border-t border-border p-4">
         <h2 className="section-header">SYSTEM</h2>
         <div className="mt-3 space-y-2">
-          <StatusPill status="unknown" variant="dot" />
-          <p className="font-mono text-[0.625rem] uppercase tracking-widest text-muted">
-            Last ingest: —
-          </p>
+          <LiveStatusPill variant="dot" />
+          <LastIngestLabel />
         </div>
       </footer>
     </nav>

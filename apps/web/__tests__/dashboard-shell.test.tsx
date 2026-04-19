@@ -32,7 +32,7 @@ describe("LeftNav", () => {
     for (const title of ["FEEDS", "FILTERS", "ENTITIES", "SAVED VIEWS", "SYSTEM"]) {
       expect(screen.getByRole("heading", { level: 2, name: title })).toBeInTheDocument();
     }
-    expect(screen.getByText(/last ingest/i)).toBeInTheDocument();
+    expect(screen.getByText(/last probe/i)).toBeInTheDocument();
   });
 });
 

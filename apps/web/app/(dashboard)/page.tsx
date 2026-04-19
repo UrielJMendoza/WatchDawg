@@ -4,6 +4,7 @@ import { Topbar } from "@/components/topbar";
 import { LeftNav } from "@/components/nav/left-nav";
 import { DetailPanel } from "@/components/panel/detail-panel";
 import { TimelineStrip } from "@/components/timeline-strip";
+import { HealthPoller } from "@/components/status/health-poller";
 
 /**
  * Three-pane dashboard shell. Layout math (height budget):
@@ -29,6 +30,8 @@ export default async function DashboardPage() {
       aria-label="WatchDawg dashboard"
       className="grid flex-1 h-[calc(100vh-3rem)] grid-cols-[240px_1fr_360px] grid-rows-[48px_1fr_32px]"
     >
+      <HealthPoller />
+
       <Topbar userEmail={user?.email ?? null} />
 
       <LeftNav />
