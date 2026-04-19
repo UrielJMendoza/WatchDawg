@@ -1,2 +1,8 @@
 packages:
   - "apps/*"
+
+# Binary dependencies that need to build on install.
+# Keep this list explicit so `pnpm install --ignore-scripts` surprises are visible.
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
