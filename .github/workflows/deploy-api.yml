@@ -1,0 +1,101 @@
+name: deploy-api
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+
+# Required for the OIDC token exchange with Google (Workload Identity
+# Federation). No long-lived SA JSON key exists in this repo's secrets.
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: us-central1
+  SERVICE_NAME: watchdawg-api
+  REPO_NAME: watchdawg
+  IMAGE: ${{ vars.GCP_REGION || 'us-central1' }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/watchdawg/watchdawg-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Auth to GCP via WIF
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA_EMAIL }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Artifact Registry auth
+        run: |
+          gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/api
+          file: apps/api/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=registry,ref=${{ env.IMAGE }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:buildcache,mode=max
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "${SERVICE_NAME}" \
+            --image "${IMAGE}:${GITHUB_SHA}" \
+            --region "${GCP_REGION}" \
+            --project "${GCP_PROJECT_ID}" \
+            --min-instances 0 \
+            --max-instances 3 \
+            --memory 512Mi \
+            --cpu 1 \
+            --timeout 300 \
+            --concurrency 40 \
+            --allow-unauthenticated \
+            --set-env-vars "ENV=prod,ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }}" \
+            --set-secrets "SUPABASE_URL=supabase-url:latest,SUPABASE_SERVICE_ROLE_KEY=supabase-service-role-key:latest,SUPABASE_ANON_KEY=supabase-anon-key:latest,SUPABASE_JWT_SECRET=supabase-jwt-secret:latest,CRON_SECRET=cron-secret:latest,SENTRY_DSN=sentry-dsn:latest" \
+            --quiet
+
+      - name: Smoke test /health
+        run: |
+          URL=$(gcloud run services describe "${SERVICE_NAME}" \
+            --region "${GCP_REGION}" --project "${GCP_PROJECT_ID}" \
+            --format='value(status.url)')
+          echo "Deployed at: $URL"
+          for i in 1 2 3 4 5; do
+            if curl --fail --silent --show-error --max-time 10 "$URL/health" >/dev/null; then
+              echo "Health OK on attempt $i"
+              exit 0
+            fi
+            echo "Attempt $i failed; retrying in $((i * 2))s"
+            sleep $((i * 2))
+          done
+          echo "Health check failed after 5 attempts" >&2
+          exit 1
