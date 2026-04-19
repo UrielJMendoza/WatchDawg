@@ -14,4 +14,20 @@ describe("ClassificationBanner", () => {
     const banner = screen.getByRole("banner", { name: /classification marking/i });
     expect(banner).toHaveAttribute("data-position", "bottom");
   });
+
+  it("renders distinct top and bottom instances when both are mounted", () => {
+    render(
+      <>
+        <ClassificationBanner position="top" />
+        <ClassificationBanner position="bottom" />
+      </>,
+    );
+    const banners = screen.getAllByRole("banner", { name: /classification marking/i });
+    expect(banners).toHaveLength(2);
+    const positions = banners.map((b) => b.getAttribute("data-position")).sort();
+    expect(positions).toEqual(["bottom", "top"]);
+    for (const b of banners) {
+      expect(b).toHaveTextContent("UNCLASSIFIED // OSINT");
+    }
+  });
 });
