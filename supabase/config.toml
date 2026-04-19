@@ -1,0 +1,69 @@
+# WatchDawg — Supabase CLI project config.
+#
+# Invoke the CLI from the repo root:
+#   supabase login
+#   supabase link --project-ref <your-project-ref>
+#   supabase db push         # apply ./supabase/migrations/* to the linked project
+#   supabase db reset        # replay all migrations against a local dev DB
+#   supabase migration new <snake_case_name>
+#
+# Layout: the CLI forces ./supabase/migrations/ as the migration path (v1-v2
+# both hard-code this). The spec's original infra/supabase/migrations/ path
+# is unreachable with the current CLI, so migrations live here and
+# infra/supabase/README.md points at this directory.
+
+project_id = "watchdawg"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[db.pooler]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+image_transformation = { enabled = false }
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+jwt_expiry = 3600
+enable_signup = true
+enable_manual_linking = false
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+
+[analytics]
+enabled = false
+
+[functions]
+[edge_runtime]
+enabled = false
+
+[experimental]
+orioledb_version = ""
