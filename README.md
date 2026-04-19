@@ -50,7 +50,7 @@ flowchart LR
         B[Browser]
     end
     subgraph Vercel
-        W[Next.js 15 App Router<br/>MapLibre + deck.gl]
+        W[Next.js 16 App Router<br/>MapLibre + deck.gl]
     end
     subgraph GCP
         A[FastAPI on Cloud Run<br/>us-central1]
@@ -77,7 +77,7 @@ Each edge is explained in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 | Layer       | Choice                                    | Why not the alternative                                      |
 | ----------- | ----------------------------------------- | ------------------------------------------------------------ |
-| Frontend    | Next.js 15 App Router, TypeScript strict  | Remix is solid; Next has better Vercel integration + RSC     |
+| Frontend    | Next.js 16 App Router, TypeScript strict  | Remix is solid; Next has better Vercel integration + RSC     |
 | Map         | MapLibre GL + deck.gl                     | Mapbox GL requires a token; Leaflet lacks GPU layer rendering |
 | UI          | Tailwind + shadcn/ui                      | MUI is visually too rounded / consumer for defense aesthetic |
 | Backend     | FastAPI (Python 3.12) + pydantic v2       | Express wastes Python's ML ecosystem in Phase 4              |
@@ -106,16 +106,44 @@ Each edge is explained in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Local development
 
-```bash
-pnpm install
-pnpm -C apps/web dev          # http://localhost:3000
+Prerequisites: Node 20 (`.nvmrc`), pnpm 10, Python 3.12 (`.python-version`),
+[uv](https://docs.astral.sh/uv/), Docker (for image builds), and the
+[Supabase CLI](https://supabase.com/docs/guides/cli).
 
-cd apps/api
-uv sync
+```bash
+# 1. Install git hooks (format, lint, secret-scan on staged files)
+pip install pre-commit && pre-commit install
+
+# 2. Frontend
+pnpm install
+cp apps/web/.env.example apps/web/.env.local && $EDITOR apps/web/.env.local
+pnpm -C apps/web dev              # http://localhost:3000
+
+# 3. Backend
+cp apps/api/.env.example apps/api/.env && $EDITOR apps/api/.env
+cd apps/api && uv sync
 uv run uvicorn watchdawg_api.main:app --reload   # http://localhost:8000
+
+# 4. Database (once per clone)
+supabase login
+supabase link --project-ref <your-ref>
+supabase db push
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
+Verification commands CI runs on every push:
+
+```bash
+# Frontend
+pnpm -C apps/web typecheck && pnpm -C apps/web lint \
+    && pnpm -C apps/web test && pnpm -C apps/web build
+
+# Backend
+cd apps/api
+uv run ruff check && uv run ruff format --check \
+    && uv run mypy --strict src/ && uv run pytest -q
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for commit style and PR expectations.
 
 ## Deployment
 
@@ -145,18 +173,26 @@ reliability, ICD 203 for analytic rigor, and F3EAD for workflow framing.
 
 ## Roadmap
 
-1. **Phase 1** — Infrastructure, auth, empty map (← you are here).
-2. **Phase 2** — Data ingestion (GDELT, AIS, OpenSky, NewsData, Reddit).
-3. **Phase 3** — Interactive map layers, timeline, detail panels.
-4. **Phase 4** — Fusion + scoring + ML anomaly detection.
+1. **Phase 1** — Infrastructure, auth, empty map. ✅ _current_
+2. **Phase 2** — Data ingestion (GDELT 2.1, AISStream, OpenSky, NewsData, Reddit).
+3. **Phase 3** — Interactive map layers, timeline scrubber, detail panels.
+4. **Phase 4** — Event fusion, scoring, ML anomaly detection.
 5. **Phase 5** — Methodology documentation and evaluation harness.
-6. **Phase 6** — Alerting and saved views.
+6. **Phase 6** — Saved views, alerting, collaborative annotations.
 7. **Phase 7** — Tradecraft write-up, Lighthouse CI, polish.
 
 ## Acknowledgments
 
-Per data-source license requirements; full attribution renders in the UI
-when those layers land (Phase 2+).
+Full attribution renders in the UI alongside each data layer as Phase 2
+brings sources online. Tech-stack credits:
+
+- [MapLibre GL](https://maplibre.org/), [deck.gl](https://deck.gl/) — map + overlay.
+- [CARTO basemaps](https://carto.com/basemaps) — dark-matter tile style.
+- [shadcn/ui](https://ui.shadcn.com/), [Radix Primitives](https://www.radix-ui.com/) — UI primitives.
+- [Geist](https://vercel.com/font) — typography.
+- [Supabase](https://supabase.com/) — auth + Postgres + Storage.
+- [FastAPI](https://fastapi.tiangolo.com/), [pydantic](https://docs.pydantic.dev/),
+  [structlog](https://www.structlog.org/) — backend.
 
 ## License
 

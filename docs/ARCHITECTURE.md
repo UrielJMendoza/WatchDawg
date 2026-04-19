@@ -11,12 +11,12 @@ this diagram.
 ```mermaid
 flowchart TB
     subgraph Client["Client (browser)"]
-        UI[Next.js 15 App Router<br/>React 19 + MapLibre + deck.gl]
+        UI[Next.js 16 App Router<br/>React 19 + MapLibre + deck.gl]
     end
 
     subgraph Edge["Vercel (edge)"]
         SSR[Next.js SSR / RSC]
-        MW[Edge middleware<br/>Supabase session refresh]
+        MW[Edge proxy<br/>Supabase session refresh]
     end
 
     subgraph CloudRun["Cloud Run — us-central1"]
