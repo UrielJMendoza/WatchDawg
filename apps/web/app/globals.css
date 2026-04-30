@@ -1,0 +1,75 @@
+/* MapLibre needs its base CSS imported. Must come before @tailwind. */
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Gotham theme tokens (HSL channels for Tailwind hsl(var(--x))) */
+    --background: 222 24% 6%; /* #0B0F14 */
+    --surface: 220 22% 9%; /* #121821 */
+    --surface-2: 218 20% 12%; /* #181F2A */
+    --border: 217 18% 18%; /* #262F3F */
+    --muted: 216 12% 45%; /* #646D7D */
+    --foreground: 210 20% 92%; /* #E3E8EF */
+    --primary: 199 89% 55%; /* #2AA8F2 */
+    --primary-foreground: 222 24% 6%;
+    --danger: 0 72% 55%; /* #E04848 */
+    --warning: 38 92% 55%; /* #F2A922 */
+    --success: 142 55% 45%; /* #34B368 */
+    --classification: 142 55% 45%;
+    --radius: 0.25rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1, "tnum" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Tabular numerics throughout for data alignment */
+  .font-mono,
+  code,
+  pre,
+  kbd,
+  samp {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Sharper focus rings — Gotham, not Material */
+  *:focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+  }
+
+  /* Scrollbar polish for the dark surface */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted));
+  }
+}
+
+@layer components {
+  /* Section header used across left nav, panels, etc.
+     "font-mono text-xs uppercase tracking-widest text-muted-foreground" */
+  .section-header {
+    @apply font-mono text-xs uppercase tracking-widest text-muted-foreground;
+  }
+}
