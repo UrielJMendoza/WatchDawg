@@ -72,4 +72,59 @@
   .section-header {
     @apply font-mono text-xs uppercase tracking-widest text-muted-foreground;
   }
+
+  /* CRT-style scanline overlay for the sci-fi HUD. */
+  .scanlines {
+    background-image: repeating-linear-gradient(
+      0deg,
+      hsl(var(--primary) / 0.05) 0px,
+      hsl(var(--primary) / 0.05) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  }
+
+  /* Slow-panning blueprint grid. */
+  .grid-pan {
+    background-image:
+      linear-gradient(hsl(var(--primary) / 0.4) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--primary) / 0.4) 1px, transparent 1px);
+    background-size: 44px 44px;
+    animation: grid-pan 18s linear infinite;
+  }
+
+  /* Continuous horizontal ticker. Duplicate children for a seamless loop. */
+  .marquee {
+    animation: marquee 70s linear infinite;
+  }
+  .marquee:hover {
+    animation-play-state: paused;
+  }
+}
+
+@keyframes grid-pan {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 44px 44px;
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee,
+  .grid-pan,
+  .animate-flicker,
+  .animate-glow-pulse {
+    animation: none;
+  }
 }

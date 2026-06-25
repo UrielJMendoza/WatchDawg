@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WatchDawg — OSINT Maritime Security",
+  title: "GOTHAM — Geopolitical Intelligence",
   description:
-    "Real-time OSINT maritime-security situational awareness for the Red Sea and Horn of Africa.",
+    "Live OSINT command center tracking the Iran–Israel and Russia–Ukraine theaters.",
   robots: {
     index: false,
     follow: false,

@@ -1,17 +1,9 @@
-import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/server";
 import { Topbar } from "@/components/topbar";
 import { LeftNav } from "@/components/nav/left-nav";
 import { DetailPanel } from "@/components/panel/detail-panel";
 import { TimelineStrip } from "@/components/timeline/timeline-strip";
-
-const WatchDawgMap = dynamic(
-  () =>
-    import("@/components/map/watchdawg-map").then((m) => ({
-      default: m.WatchDawgMap,
-    })),
-  { ssr: false },
-);
+import { WatchDawgMapDynamic as WatchDawgMap } from "@/components/map/watchdawg-map-dynamic";
 
 export default async function DashboardPage() {
   const supabase = await createClient();

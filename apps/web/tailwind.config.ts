@@ -70,24 +70,44 @@ const config: Config = {
           "monospace",
         ],
       },
+      boxShadow: {
+        "glow-primary": "0 0 12px hsl(var(--primary) / 0.55)",
+        "glow-danger": "0 0 12px hsl(var(--danger) / 0.55)",
+      },
       keyframes: {
         "fade-in": {
           from: { opacity: "0" },
           to: { opacity: "1" },
         },
         "slide-in-right": {
-          from: { transform: "translateX(100%)" },
-          to: { transform: "translateX(0)" },
+          from: { transform: "translateX(100%)", opacity: "0" },
+          to: { transform: "translateX(0)", opacity: "1" },
         },
         pulse: {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.4" },
         },
+        "glow-pulse": {
+          "0%, 100%": { opacity: "0.35", transform: "scale(1)" },
+          "50%": { opacity: "0.9", transform: "scale(1.08)" },
+        },
+        flicker: {
+          "0%, 100%": { opacity: "1" },
+          "45%": { opacity: "0.4" },
+          "50%": { opacity: "0.9" },
+          "55%": { opacity: "0.3" },
+        },
+        marquee: {
+          from: { transform: "translateX(0)" },
+          to: { transform: "translateX(-50%)" },
+        },
       },
       animation: {
-        "fade-in": "fade-in 150ms ease-out",
-        "slide-in-right": "slide-in-right 150ms ease-out",
+        "fade-in": "fade-in 300ms ease-out",
+        "slide-in-right": "slide-in-right 220ms ease-out",
         pulse: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "glow-pulse": "glow-pulse 2.4s ease-in-out infinite",
+        flicker: "flicker 1.6s steps(2, end) infinite",
       },
     },
   },
