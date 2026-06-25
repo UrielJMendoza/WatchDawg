@@ -1,0 +1,16 @@
+{
+  "name": "watchdawg",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WatchDawg - OSINT Maritime Security Dashboard (Red Sea + Horn of Africa)",
+  "scripts": {
+    "dev": "pnpm --filter @watchdawg/web dev",
+    "build": "pnpm --filter @watchdawg/web build",
+    "lint": "pnpm --filter @watchdawg/web lint"
+  },
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.12.0"
+}

@@ -1,0 +1,25 @@
+services:
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: watchdawg-api
+    ports:
+      - "8000:8080"
+    environment:
+      PORT: "8080"
+      ENV: dev
+      ALLOWED_ORIGINS: "http://localhost:3000"
+      SUPABASE_URL: "${SUPABASE_URL}"
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY}"
+      SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      AISSTREAM_API_KEY: "${AISSTREAM_API_KEY:-}"
+      NEWSDATA_API_KEY: "${NEWSDATA_API_KEY:-}"
+      OPENSKY_CLIENT_ID: "${OPENSKY_CLIENT_ID:-}"
+      OPENSKY_CLIENT_SECRET: "${OPENSKY_CLIENT_SECRET:-}"
+      REDDIT_CLIENT_ID: "${REDDIT_CLIENT_ID:-}"
+      REDDIT_CLIENT_SECRET: "${REDDIT_CLIENT_SECRET:-}"
+      REDDIT_USER_AGENT: "${REDDIT_USER_AGENT:-python:io.watchdawg.osint:v0.1}"
+      CRON_SECRET: "${CRON_SECRET:-dev-cron-secret-change-me}"
+    restart: unless-stopped
