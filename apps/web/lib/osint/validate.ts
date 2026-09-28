@@ -157,7 +157,7 @@ export function headlineFromUrl(url: string | undefined, properNouns: string[] =
 
 const ACRONYMS: Record<string, string> = {
   us: "US", uk: "UK", un: "UN", eu: "EU", nato: "NATO", idf: "IDF", fbi: "FBI", cia: "CIA",
-  isis: "ISIS", iaea: "IAEA", who: "WHO", imf: "IMF", g7: "G7", g20: "G20", uae: "UAE", drc: "DRC",
+  isis: "ISIS", iaea: "IAEA", imf: "IMF", g7: "G7", g20: "G20", uae: "UAE", drc: "DRC",
 };
 
 function decodeURIComponentSafe(s: string): string {

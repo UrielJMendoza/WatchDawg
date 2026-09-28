@@ -27,5 +27,9 @@ describe("headline vocabulary", () => {
     expect(classifyText("Protesters clash with riot police in Nairobi")?.category).toBe("unrest");
     expect(classifyText("Magnitude 6.1 earthquake strikes off Japan")?.category).toBe("seismic");
     expect(classifyText("Champions League: late goal seals win")).toBeNull();
+    expect(classifyText("Man convicted of murder in Chicago robbery")?.category).toBe("crime");
+    // Rulings and clinical trials are not crime.
+    expect(classifyText("Supreme Court ruling on tariffs expected")).toBeNull();
+    expect(classifyText("Vaccine trial shows promise")).toBeNull();
   });
 });

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { unzipSync } from "fflate";
 import type { Category, GeoPrecision, Signal } from "../types";
-import { CAMEO_ROOTS_KEPT, VIOLENCE_VOCAB, cameo, domainOf } from "../taxonomy";
+import { CAMEO_ROOTS_KEPT, VIOLENCE_VOCAB, cameo, classifyText, domainOf } from "../taxonomy";
 import { countryByIso3, stripDiacritics, type GazetteerData } from "../gazetteer";
 import {
   checkCoords,
@@ -307,14 +307,24 @@ export function groupsToSignals(
     // assigns "assault" to court reporting and "fight" to sports and tax
     // disputes; a headline with no violent vocabulary vetoes the coding.
     const headline = headlineFromUrl(lead.url, [lead.geoName, ...topActors(g.rows)]);
+    let category = lead.category;
+    let label = lead.label;
     if (domainOf(lead.category) === "security") {
       if (headline && !VIOLENCE_VOCAB.test(headline)) {
         ledger.filter("relevance.headline_mismatch");
         continue;
       }
-      if (!headline && g.outlets.size < 2) {
-        ledger.filter("evidence.unverifiable");
+      // Violence claims need two independent outlets: single-outlet local
+      // stories are GDELT's biggest source of false alarms.
+      if (g.outlets.size < 2) {
+        ledger.filter(headline ? "evidence.single_outlet" : "evidence.unverifiable");
         continue;
+      }
+      // Courts, robberies and murders are crime, not war.
+      const cls = headline ? classifyText(headline) : null;
+      if (cls?.category === "crime") {
+        category = "crime";
+        label = "Crime report";
       }
     }
     const attention = Math.min(1, Math.log10(1 + g.articles) / 2);
@@ -323,8 +333,8 @@ export function groupsToSignals(
     signals.push({
       key: `gdelt:${key}`,
       source: "gdelt",
-      category: lead.category,
-      title: `${lead.label} — ${place}`,
+      category,
+      title: `${label} — ${place}`,
       headline,
       url: lead.url,
       outlet: lead.outlet,

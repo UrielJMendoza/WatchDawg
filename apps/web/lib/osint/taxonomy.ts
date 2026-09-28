@@ -148,7 +148,7 @@ export function cameo(
 const RULES: Array<[RegExp, Category, number]> = [
   [/\b(air ?strikes?|missiles?|drones? (?:attack|strike)|shelling|artillery|airstrike|bombard\w*|offensive|frontline|troops? (?:advance|killed)|killed in (?:fighting|clashes)|clashes?|firefight|gunfire|rockets?|incursion|invasion|militants? killed|war\b)/i, "conflict", 3],
   [/\b(suicide bomb\w*|car bomb|explosion|blast|terror\w*|gunm[ae]n|hostages?|kidnap\w*|abduct\w*|assassinat\w*|massacre|detained|coup|militia\w*|insurgen\w*|jihadis\w*|extremists?)\b/i, "security", 3],
-  [/\b(murder\w*|homicides?|robber(?:y|ies)|burglar\w*|shootings?|shot dead|stabb\w*|gangs?|cartels?|drug (?:bust|lord|traffick\w*)|trafficking|smuggl\w*|carjack\w*|heist|manhunt|police (?:say|said|arrest\w*)|arrested|charged with|serial killer)\b/i, "crime", 3],
+  [/\b(murder\w*|homicides?|robber(?:s|y|ies)?|burglar\w*|shootings?|shot dead|stabb\w*|gangs?|cartels?|drug (?:bust|lord|traffick\w*)|trafficking|smuggl\w*|carjack\w*|heist|manhunt|police (?:say|said|arrest\w*)|arrested|charged with|serial killer|jury|sentenced|convicted|prosecutors?|felon\w*|theft|stolen|indict\w*|detectives?|sheriff)\b/i, "crime", 3],
   [/\b(protests?|protesters?|demonstrat\w*|riots?|rally|rallies|march(?:es|ed)? (?:against|for)|strike action|walkout|unrest|tear gas|crackdown)\b/i, "unrest", 3],
   [/\b(threat\w*|warns?|warning|sanction\w*|tensions?|ultimatum|mobili[sz]\w*|military drills?|exercises|standoff|expel\w*|embargo)\b/i, "tension", 2],
   [/\b(talks|summit|agreement|deal|treaty|ceasefire|truce|negotiat\w*|diplomat\w*|election\w*|vote|minister visits?|meets? with|accord)\b/i, "diplomacy", 2],
@@ -183,7 +183,7 @@ export function classifyText(text: string): { category: Category; score: number 
  * "assault" or "fight": a sanity check, not a classifier.
  */
 export const VIOLENCE_VOCAB =
-  /\b(kill\w*|dead|deaths?|died|dies|wounded|injur\w*|casualt\w*|attack\w*|strikes?|struck|bomb\w*|blasts?|explo\w*|shell\w*|missiles?|rockets?|drones?|artillery|gunfire|gunm[ae]n|shoot\w*|shot|stabb\w*|fight\w*|clash\w*|battles?|troops?|soldiers?|army|military|militants?|forces|raid\w*|ambush\w*|siege|offensive|invasion|front ?line|war|warfare|airstrikes?|hostages?|kidnap\w*|abduct\w*|assassinat\w*|massacre|murder\w*|homicide|violen\w*|terror\w*|insurgen\w*|rebels?|jihadis\w*|coup|riot\w*|arrest\w*|detain\w*|crackdown|executed|execution|torture\w*|weapons?|guns?|firearms?|armed)\b/i;
+  /\b(kill(?:s|ed|ing)?|wounded|injur\w*|casualt\w*|attack\w*|air ?strikes?|strikes? (?:on|against|hit\w*)|bomb\w*|blasts?|explo(?:sion|sions|sive|sives|ded)|shell(?:ing|ed|s)|missiles?|rockets?|drones?|artillery|gunfire|exchang\w* (?:of )?fire|open(?:s|ed|ing)? fire|cross-?fire|gunm[ae]n|shoot(?:ing|ings|out)|shot (?:dead|down)|stabb\w*|fighting|firefight|clash(?:es|ed)|troops?|soldiers?|militants?|militia\w*|raid(?:s|ed)?|ambush\w*|siege|offensive|invasion|front ?line|warfare|hostages?|kidnap\w*|abduct\w*|assassinat\w*|massacre|murder\w*|homicide|terror\w*|insurgen\w*|rebels?|jihadis\w*|coup|riot\w*|executed|torture\w*|gunmen|armed (?:men|group|attack|robbery|forces))\b/i;
 
 /** Baseline severity for a headline classified into a category. */
 export const TEXT_SEVERITY: Record<Category, number> = {

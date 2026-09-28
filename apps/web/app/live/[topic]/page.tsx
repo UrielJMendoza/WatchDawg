@@ -31,7 +31,8 @@ export default async function TopicPage({ params }: { params: Params }) {
   const t = topicBySlug((await params).topic);
   if (!t) notFound();
   const snap = await getSnapshot(t.window).catch(() => null);
-  const incidents = (snap?.incidents ?? []).filter(t.match).sort((a, b) => b.lastSeen - a.lastSeen);
+  // The snapshot is already ranked: severe, well-attested and recent first.
+  const incidents = (snap?.incidents ?? []).filter(t.match);
   const byCat = new Map<string, number>();
   const countries = new Set<string>();
   for (const i of incidents) {
@@ -93,7 +94,7 @@ export default async function TopicPage({ params }: { params: Params }) {
             ))}
         </div>
       </div>
-      <SituationBrief snap={snap} incidents={incidents} heading={`${t.h1}: latest incidents`} />
+      <SituationBrief snap={snap} incidents={incidents} heading={`${t.h1}: most significant incidents`} />
       <div className="mx-auto max-w-5xl px-4 pb-12">
         <Link href={globe} className="text-sm text-primary hover:underline">
           Explore these incidents on the live 3D globe →
