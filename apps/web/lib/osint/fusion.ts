@@ -90,8 +90,8 @@ interface Draft {
   lastSeen: number;
   sources: Set<SourceId>;
   keys: Set<string>;
-  /** Content words of the anchoring headline, for same-story matching. */
-  words?: Set<string>;
+  /** Content words of each member headline, for same-story matching. */
+  stories: Array<{ words: Set<string>; vague: boolean }>;
 }
 
 const STOP = new Set([
@@ -144,8 +144,9 @@ function compatible(d: Draft, s: Signal, family: Family): boolean {
   if (DISTINCT_PER_SOURCE.has(family) && d.sources.has(s.source)) return false;
   if (!NATURAL.has(family)) {
     if (d.country && s.country && d.country !== s.country) return false;
-    // Country-level fixes only fuse with other country-level fixes.
-    if ((d.precision === "country") !== (s.precision === "country")) return false;
+    // A fix that only names the country says nothing about *where*; such
+    // reports fuse by story (see fuse), never by sharing a centroid.
+    if (d.precision === "country" || s.precision === "country") return false;
   }
   const rule = ruleFor({ family, precision: s.precision });
   if (Math.abs(s.time - d.lastSeen) > rule.gapMs) return false;
@@ -303,21 +304,22 @@ export function fuse(signals: Signal[]): Incident[] {
       }
     }
     const human = !NATURAL.has(family) && !!s.country;
-    const words = human ? headlineWords(s.headline) : undefined;
-    if (!best && words && words.size) {
-      // A report that only names the country can join the incident it
-      // describes elsewhere in that country; two precise fixes never merge
+    const vague = s.precision === "country";
+    const words = human ? headlineWords(s.headline) : new Set<string>();
+    if (!best && words.size) {
+      // A report that only names the country joins the incident in that
+      // country that tells the same story. Two located reports never merge
       // on wording alone (two strikes, two cities, same phrasing).
       for (const d of byCountry.get(`${family}|${s.country}`) ?? []) {
-        if (d.keys.has(s.key) || (s.precision !== "country" && d.precision !== "country")) continue;
-        if (Math.abs(s.time - d.lastSeen) > RULES.humanRegion.gapMs) continue;
-        if (d.words && sameStory(words, d.words)) {
+        if (d.keys.has(s.key) || Math.abs(s.time - d.lastSeen) > RULES.humanRegion.gapMs) continue;
+        if (d.stories.some((st) => (vague || st.vague) && sameStory(words, st.words))) {
           best = d;
           break;
         }
       }
     }
     if (best) {
+      if (words.size) best.stories.push({ words, vague });
       best.signals.push(s);
       best.sources.add(s.source);
       best.keys.add(s.key);
@@ -335,7 +337,7 @@ export function fuse(signals: Signal[]): Incident[] {
       lastSeen: s.time,
       sources: new Set([s.source]),
       keys: new Set([s.key]),
-      words,
+      stories: words.size ? [{ words, vague }] : [],
     };
     drafts.push(d);
     if (human) {

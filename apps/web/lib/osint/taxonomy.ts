@@ -150,7 +150,7 @@ export const LEGAL_VOCAB =
   /\b(court|sentenc(?:e|es|ed|ing)|convict(?:s|ed|ion)?|jury|trial|prosecut\w*|indict\w*|charged|pleads?|guilty|acquit\w*|verdict)\b/i;
 
 const RULES: Array<[RegExp, Category, number]> = [
-  [/\b(air ?strikes?|missiles?|drones? (?:attack|strike)|shelling|artillery|airstrike|bombard\w*|offensive|frontline|troops? (?:advance|killed)|killed in (?:fighting|clashes)|clashes?|firefight|gunfire|rockets?|incursion|invasion|militants? killed|strikes? (?:on|against|hit\w*|kill\w*|downtown)|fighting|fighters|exchang\w* (?:of )?fire|open(?:s|ed)? fire)/i, "conflict", 3],
+  [/\b(air ?strikes?|missiles?|drones? (?:attack|strike)|shelling|artillery|airstrike|bombard\w*|offensive|frontline|troops? (?:advance|killed)|killed in (?:fighting|clashes)|clashes?|firefight|gunfire|rockets?|incursion|invasion|militants? killed|strikes? (?:on|against|hit\w*|kill\w*|downtown)|fighting|fighters|exchang\w* (?:of )?fire|open(?:s|ed)? fire)\b/i, "conflict", 3],
   // Weak cues: "war" alone is mostly commentary ("Pope touches on war"), and
   // casualty words also appear in crime and disasters. Together they count.
   [/\b(wars?|wartime)\b/i, "conflict", 1],
@@ -195,6 +195,10 @@ export function classifyText(text: string): { category: Category; score: number 
  */
 export const VIOLENCE_VOCAB =
   /\b(kill(?:s|ed|ing)?|wounded|injur\w*|casualt\w*|attack\w*|air ?strikes?|strikes? (?:on|against|hit\w*)|bomb(?:s|ed|ing|ings|er|ers)?|blasts?|explo(?:sion|sions|sive|sives|ded)|shell(?:ing|ed|s)|missiles?|rockets?|drones?|artillery|gunfire|exchang\w* (?:of )?fire|open(?:s|ed|ing)? fire|cross-?fire|gunm[ae]n|shoot(?:ing|ings|out)|shot (?:dead|down)|stabb\w*|fighting|firefight|clash(?:es|ed)|troops?|soldiers?|militants?|militia\w*|raid(?:s|ed)?|ambush\w*|siege|offensive|invasion|front ?line|warfare|hostages?|kidnap\w*|abduct\w*|assassinat\w*|massacre|murder\w*|homicide|terror\w*|insurgen\w*|rebels?|jihadis\w*|coup|riot\w*|executed|torture\w*|gunmen|armed (?:men|group|attack|robbery|forces))\b/i;
+
+/** Culture and entertainment coverage: a "kill" or "abduction" here is a plot, not an event. */
+export const NOT_AN_EVENT =
+  /\b(ufos?|movies?|films?|trailer|box office|netflix|hbo|episode|album|songs?|novel|documentary|horoscope|video games?|celebrity|actress|comeback)\b/i;
 
 /** Minimum classifier score for a newsroom headline to count as an event. */
 export const MIN_TEXT_SCORE = 2;

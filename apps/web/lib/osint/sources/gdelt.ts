@@ -1,7 +1,16 @@
 import { createHash } from "node:crypto";
 import { unzipSync } from "fflate";
 import type { Category, GeoPrecision, Signal } from "../types";
-import { CAMEO_ROOTS_KEPT, LEGAL_VOCAB, MIN_TEXT_SCORE, VIOLENCE_VOCAB, cameo, classifyText, domainOf } from "../taxonomy";
+import {
+  CAMEO_ROOTS_KEPT,
+  LEGAL_VOCAB,
+  MIN_TEXT_SCORE,
+  NOT_AN_EVENT,
+  VIOLENCE_VOCAB,
+  cameo,
+  classifyText,
+  domainOf,
+} from "../taxonomy";
 import { countryByIso3, stripDiacritics, type GazetteerData } from "../gazetteer";
 import {
   checkCoords,
@@ -331,7 +340,13 @@ export function groupsToSignals(
         continue;
       }
       const cls = classifyText(headline);
-      if (!VIOLENCE_VOCAB.test(headline) || !cls || cls.score < MIN_TEXT_SCORE || !VIOLENT.has(cls.category)) {
+      if (
+        !VIOLENCE_VOCAB.test(headline) ||
+        NOT_AN_EVENT.test(headline) ||
+        !cls ||
+        cls.score < MIN_TEXT_SCORE ||
+        !VIOLENT.has(cls.category)
+      ) {
         ledger.filter("relevance.headline_mismatch");
         continue;
       }

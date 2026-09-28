@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LEGAL_VOCAB, MIN_TEXT_SCORE, VIOLENCE_VOCAB, classifyText } from "./taxonomy";
+import { LEGAL_VOCAB, MIN_TEXT_SCORE, NOT_AN_EVENT, VIOLENCE_VOCAB, classifyText } from "./taxonomy";
 
 describe("headline vocabulary", () => {
   // Real slug headlines GDELT coded as conflict/assault on the live site.
@@ -40,5 +40,9 @@ describe("headline vocabulary", () => {
     expect(classifyText("3 Egyptian Officials Convicted of Kidnapping Slain Italian Student")?.category).toBe("crime");
     expect(classifyText("Kill jackie catherine zeta jones comeback vehicle crashes and burns")?.score ?? 0).toBeLessThan(MIN_TEXT_SCORE);
     expect(classifyText("Vaccine trial shows promise")?.score ?? 0).toBeLessThan(MIN_TEXT_SCORE);
+    // "firefight" must not match inside "Firefighter".
+    expect(classifyText("Henrico Firefighter killed in Richmond hit and run")?.score ?? 0).toBeLessThan(MIN_TEXT_SCORE);
+    expect(NOT_AN_EVENT.test("Joe jordan ufo abductions spiritual explanation")).toBe(true);
+    expect(NOT_AN_EVENT.test("Heavy fighting reported on the outskirts of Kharkiv")).toBe(false);
   });
 });

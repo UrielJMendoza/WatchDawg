@@ -1,6 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 import type { Signal } from "../types";
-import { MIN_TEXT_SCORE, classifyText, TEXT_SEVERITY } from "../taxonomy";
+import { MIN_TEXT_SCORE, NOT_AN_EVENT, classifyText, TEXT_SEVERITY } from "../taxonomy";
 import { geocodeText, type GazetteerData } from "../gazetteer";
 import { checkTime, clamp01, cleanText, hashId, hostOf, Ledger, safeUrl } from "../validate";
 import type { CollectContext, CollectResult, SourceAdapter } from "./types";
@@ -130,7 +130,7 @@ export function itemsToSignals(
     const byTitle = classifyText(title);
     const fromTitle = !!byTitle && byTitle.score >= MIN_TEXT_SCORE;
     const cls = fromTitle ? byTitle : classifyText(`${title} ${summary}`);
-    if (!cls || cls.score < (fromTitle ? MIN_TEXT_SCORE : MIN_TEXT_SCORE + 1)) {
+    if (!cls || cls.score < (fromTitle ? MIN_TEXT_SCORE : MIN_TEXT_SCORE + 1) || NOT_AN_EVENT.test(title)) {
       ledger.filter("relevance.unclassified");
       continue;
     }

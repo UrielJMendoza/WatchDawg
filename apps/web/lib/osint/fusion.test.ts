@@ -38,6 +38,17 @@ describe("same-story fusion", () => {
     expect(incidents[0].precision).toBe("region");
   });
 
+  it("joins the matching story even when unrelated country-level reports came first", () => {
+    const incidents = fuse([
+      wire({ headline: "Myanmar rebels seize border town after week of fighting", lat: 21.9, lon: 95.9, precision: "country", quality: 0.95 }),
+      wire({ headline: "At least 33 killed after Myanmar military air strike hits market", lat: 21.9, lon: 95.9, precision: "country", quality: 0.9 }),
+      wire({ headline: "Myanmar's military airstrike kills at least 33 in Rakhine State", lat: 20.1, lon: 93.0, precision: "region", quality: 0.85 }),
+    ]);
+    expect(incidents).toHaveLength(2);
+    const strike = incidents.find((i) => i.signals.length === 2)!;
+    expect(strike.precision).toBe("region");
+  });
+
   it("never merges two precisely located events on wording alone", () => {
     const incidents = fuse([
       wire({ headline: "Russian drone strike kills 3 in Kharkiv", lat: 49.99, lon: 36.23, country: "UA", precision: "city" }),
