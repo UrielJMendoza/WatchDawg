@@ -43,6 +43,8 @@ export interface FilterState {
   preciseOnly: boolean;
   fatalOnly: boolean;
   country: string | null;
+  /** Brushed on the timeline: [from, to] epoch ms, or null for the whole window. */
+  timeRange: [number, number] | null;
 }
 
 export const DEFAULT_FILTERS: FilterState = {
@@ -55,6 +57,7 @@ export const DEFAULT_FILTERS: FilterState = {
   preciseOnly: false,
   fatalOnly: false,
   country: null,
+  timeRange: null,
 };
 
 export function fatalitiesOf(i: Incident): number {
@@ -72,6 +75,8 @@ export function passesFilters(i: Incident, f: FilterState): boolean {
   if (f.preciseOnly && i.precision === "country") return false;
   if (f.fatalOnly && fatalitiesOf(i) <= 0) return false;
   if (f.country && i.country !== f.country) return false;
+  // An incident is "in" the brushed range if its activity overlaps it.
+  if (f.timeRange && (i.firstSeen > f.timeRange[1] || i.lastSeen < f.timeRange[0])) return false;
   return true;
 }
 
@@ -85,6 +90,7 @@ export function activeFilterCount(f: FilterState): number {
   if (f.preciseOnly) n++;
   if (f.fatalOnly) n++;
   if (f.country) n++;
+  if (f.timeRange) n++;
   return n;
 }
 

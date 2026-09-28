@@ -74,6 +74,11 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
     if (next !== window.location.search) window.history.replaceState(null, "", `${window.location.pathname}${next}`);
   }, [hydrated, window_, query, selection, filters.country]);
 
+  // A brushed time range belongs to one window; switching windows clears it.
+  useEffect(() => {
+    setFilters((f) => (f.timeRange ? { ...f, timeRange: null } : f));
+  }, [window_]);
+
   // ─── UI state ───────────────────────────────────────────────────────────
   const [layers, setLayers] = useState<LayerState>(DEFAULT_LAYERS);
   const [basemap, setBasemap] = useState<Basemap>("dark");
@@ -432,7 +437,12 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
         {/* Bottom: timeline + HUD readouts */}
         <div className="panel absolute bottom-3 left-3 right-3 z-20 flex h-[112px] items-stretch gap-4 rounded-md px-4 py-2.5 lg:left-[344px] lg:right-[404px] max-lg:hidden">
           <div className="min-w-0 flex-1">
-            <Timeline data={snap?.timeline} now={now} />
+            <Timeline
+              data={snap?.timeline}
+              now={now}
+              range={filters.timeRange}
+              onRange={(timeRange) => setFilters((f) => ({ ...f, timeRange }))}
+            />
           </div>
         </div>
 
