@@ -6,7 +6,7 @@ import { ADAPTERS } from "@/lib/osint/engine";
 export const metadata: Metadata = {
   title: "Methodology — sources, validation and grading",
   description:
-    "How WatchDawg ingests live data from USGS, NASA, GDACS, GDELT, ACLED, police open data and newsrooms; how every record is validated; and how incidents are fused and graded with the NATO Admiralty system.",
+    "How WatchDawg ingests live data from USGS, NASA, GDACS, the US National Weather Service, GDELT, ACLED, police open data and newsrooms; how every record is validated; and how incidents are fused and graded with the NATO Admiralty system.",
   alternates: { canonical: "/methodology" },
 };
 

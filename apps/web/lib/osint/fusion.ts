@@ -67,6 +67,7 @@ export const SOURCE_RELIABILITY: Record<SourceId, Reliability> = {
   usgs: "A",
   eonet: "A",
   gdacs: "A",
+  nws: "A",
   acled: "A",
   crime: "A",
   wire: "B",
@@ -77,7 +78,7 @@ const PRECISION_RANK: Record<GeoPrecision, number> = { exact: 4, city: 3, region
 const PRECISION_WEIGHT: Record<GeoPrecision, number> = { exact: 10, city: 5, region: 2, country: 0.5 };
 
 /** Title preference: authoritative instruments, then newsrooms, then machine coding. */
-const TITLE_RANK: Record<SourceId, number> = { usgs: 6, gdacs: 5, eonet: 4, crime: 4, wire: 3, acled: 2, gdelt: 1 };
+const TITLE_RANK: Record<SourceId, number> = { usgs: 6, gdacs: 5, nws: 5, eonet: 4, crime: 4, wire: 3, acled: 2, gdelt: 1 };
 
 interface Draft {
   family: Family;
@@ -89,6 +90,74 @@ interface Draft {
   lastSeen: number;
   sources: Set<SourceId>;
   keys: Set<string>;
+  /** Content words of each member headline, for same-story matching. */
+  stories: Story[];
+}
+
+interface Story {
+  words: Set<string>;
+  /** Located only to a country. */
+  vague: boolean;
+  /** That country is itself a guess (see Signal.geoWeak). */
+  weak: boolean;
+  country?: string;
+}
+
+const STOP = new Set([
+  "the", "and", "for", "after", "with", "from", "into", "over", "says", "said", "least", "more", "than",
+  "amid", "near", "about", "report", "new", "its", "has", "have", "are", "was", "were", "who", "that",
+  "this", "what", "how", "why", "latest", "live", "update", "news", "photos", "video", "watch",
+]);
+
+/** Content words of a headline, lightly stemmed ("kills"/"killed" → "kill"). */
+export function headlineWords(text: string | undefined): Set<string> {
+  const out = new Set<string>();
+  if (!text) return out;
+  const norm = text.toLowerCase().replace(/\bair strike/g, "airstrike");
+  for (let w of norm.split(/[^a-z0-9]+/)) {
+    if (!w || STOP.has(w) || (w.length < 3 && !/^\d+$/.test(w))) continue;
+    if (w.length > 5 && w.endsWith("ing")) w = w.slice(0, -3);
+    else if (w.length > 4 && w.endsWith("ed")) w = w.slice(0, -2);
+    else if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) w = w.slice(0, -1);
+    // "release"/"released" → "releas", "strike"/"strikes" → "strik".
+    if (w.length > 4 && w.endsWith("e")) w = w.slice(0, -1);
+    out.add(w);
+  }
+  return out;
+}
+
+/** Live blogs and roundups cover many events under one URL and headline. */
+const ROUNDUP = /\b(latest|live|updates?|roundup|as it happened|what we know|key events|day \d+|briefing|newsletter)\b/i;
+
+/** Sources whose URL identifies one news article (police records all link to their dataset). */
+const ARTICLE_SOURCES = new Set<SourceId>(["gdelt", "wire"]);
+
+/** Identity keys for the article behind a signal: its URL and its exact headline. */
+function articleKeysOf(family: Family, s: Signal): string[] {
+  const keys: string[] = [];
+  if (!ARTICLE_SOURCES.has(s.source) || ROUNDUP.test(s.headline ?? s.title)) return keys;
+  if (s.url) keys.push(`${family}|u|${s.url.replace(/[?#].*$/, "").replace(/\/$/, "")}`);
+  const words = headlineWords(s.headline);
+  // Short headlines ("Explosion in Kyiv") are too generic to be identity.
+  if (words.size >= 5) keys.push(`${family}|h|${[...words].sort().join(" ")}`);
+  return keys;
+}
+
+/**
+ * Two headlines tell the same story: at least three shared content words
+ * covering most of the shorter one, including a number (a toll, a count)
+ * or a fourth word.
+ */
+export function sameStory(a: Set<string>, b: Set<string>): boolean {
+  if (a.size < 3 || b.size < 3) return false;
+  let shared = 0;
+  let numeric = false;
+  for (const w of a) {
+    if (!b.has(w)) continue;
+    shared++;
+    if (/^\d+$/.test(w)) numeric = true;
+  }
+  return shared >= 3 && shared / Math.min(a.size, b.size) >= 0.45 && (numeric || shared >= 4);
 }
 
 function ruleFor(d: { family: Family; precision: GeoPrecision }) {
@@ -101,10 +170,15 @@ function compatible(d: Draft, s: Signal, family: Family): boolean {
   // A source never contradicts itself about natural hazards: two USGS
   // quakes are two quakes, not one.
   if (DISTINCT_PER_SOURCE.has(family) && d.sources.has(s.source)) return false;
+  // Crime fuses block to block only. A news report placed at a city's
+  // centre would otherwise attach to whichever police record sits nearest
+  // it, lending a vehicle theft the severity of a mass shooting.
+  if (family === "crime" && (d.precision !== "exact" || s.precision !== "exact")) return false;
   if (!NATURAL.has(family)) {
     if (d.country && s.country && d.country !== s.country) return false;
-    // Country-level fixes only fuse with other country-level fixes.
-    if ((d.precision === "country") !== (s.precision === "country")) return false;
+    // A fix that only names the country says nothing about *where*; such
+    // reports fuse by story (see fuse), never by sharing a centroid.
+    if (d.precision === "country" || s.precision === "country") return false;
   }
   const rule = ruleFor({ family, precision: s.precision });
   if (Math.abs(s.time - d.lastSeen) > rule.gapMs) return false;
@@ -234,6 +308,12 @@ function finalize(d: Draft): Incident {
 export function fuse(signals: Signal[]): Incident[] {
   const CELL = 2; // degrees; neighbour scan covers ±2° ≈ 220 km, wider rules also check a ring
   const grid = new Map<string, Draft[]>();
+  // Human-domain drafts by family and country, for same-story matching of
+  // country-level reports that the distance rules can't reach.
+  const byFamily = new Map<Family, Draft[]>();
+  // One article is one story: GDELT codes an article once per place it
+  // mentions, and syndicated copies repeat a headline word for word.
+  const byArticle = new Map<string, Draft>();
   const drafts: Draft[] = [];
   const ordered = [...signals].sort(
     (a, b) =>
@@ -246,9 +326,21 @@ export function fuse(signals: Signal[]): Incident[] {
     const wide =
       ruleFor({ family, precision: s.precision }).km > 200 || (NATURAL.has(family) && s.precision === "country");
     const keys = wide ? neighbourKeys(s.lat, s.lon, CELL * 2).map((k) => `w${k}`) : neighbourKeys(s.lat, s.lon, CELL);
+    const human = !NATURAL.has(family);
+    const vague = s.precision === "country";
+    const words = human ? headlineWords(s.headline) : new Set<string>();
+    const story: Story = { words, vague, weak: !!s.geoWeak, country: s.country };
+    const articleKeys = human ? articleKeysOf(family, s) : [];
     let best: Draft | null = null;
-    let bestKm = Infinity;
-    for (const k of keys) {
+    for (const k of articleKeys) {
+      const d = byArticle.get(k);
+      if (d && !d.keys.has(s.key) && Math.abs(s.time - d.lastSeen) <= RULES.humanRegion.gapMs) {
+        best = d;
+        break;
+      }
+    }
+    let bestKm = best ? 0 : Infinity;
+    for (const k of best ? [] : keys) {
       for (const d of grid.get(k) ?? []) {
         if (d.keys.has(s.key) || !compatible(d, s, family)) continue;
         const km = haversineKm(d.lat, d.lon, s.lat, s.lon);
@@ -258,12 +350,33 @@ export function fuse(signals: Signal[]): Incident[] {
         }
       }
     }
+    if (!best && words.size) {
+      // A report that only names the country joins the incident that tells
+      // the same story in that country, or anywhere when either side's
+      // country is only a guess. Two located reports never merge on
+      // wording alone (two strikes, two cities, same phrasing).
+      for (const d of byFamily.get(family) ?? []) {
+        if (d.keys.has(s.key) || Math.abs(s.time - d.lastSeen) > RULES.humanRegion.gapMs) continue;
+        const match = d.stories.some(
+          (st) =>
+            (vague || st.vague) &&
+            ((!!s.country && st.country === s.country) || story.weak || st.weak) &&
+            sameStory(words, st.words),
+        );
+        if (match) {
+          best = d;
+          break;
+        }
+      }
+    }
     if (best) {
+      if (words.size) best.stories.push(story);
       best.signals.push(s);
       best.sources.add(s.source);
       best.keys.add(s.key);
       best.lastSeen = Math.max(best.lastSeen, s.time);
       if (!best.country && s.country) best.country = s.country;
+      for (const k of articleKeys) if (!byArticle.has(k)) byArticle.set(k, best);
       continue;
     }
     const d: Draft = {
@@ -276,8 +389,15 @@ export function fuse(signals: Signal[]): Incident[] {
       lastSeen: s.time,
       sources: new Set([s.source]),
       keys: new Set([s.key]),
+      stories: words.size ? [story] : [],
     };
     drafts.push(d);
+    for (const k of articleKeys) if (!byArticle.has(k)) byArticle.set(k, d);
+    if (human) {
+      const list = byFamily.get(family);
+      if (list) list.push(d);
+      else byFamily.set(family, [d]);
+    }
     // Register in both the fine and the wide grid so either kind of lookup finds it.
     const fine = cellKey(s.lat, s.lon, CELL);
     const coarse = `w${cellKey(s.lat, s.lon, CELL * 2)}`;

@@ -3,7 +3,8 @@ import { strToU8, zipSync } from "fflate";
 import type { Transport } from "@/lib/osint/sources/types";
 import { USGS_URL } from "@/lib/osint/sources/usgs";
 import { EONET_URL } from "@/lib/osint/sources/eonet";
-import { GDACS_URL } from "@/lib/osint/sources/gdacs";
+import { GDACS_API } from "@/lib/osint/sources/gdacs";
+import { NWS_API } from "@/lib/osint/sources/nws";
 import { GDELT_LASTUPDATE_PATH } from "@/lib/osint/sources/gdelt";
 import { WIRE_FEEDS } from "@/lib/osint/sources/wire";
 import { CITIES } from "@/lib/osint/sources/crime";
@@ -221,6 +222,56 @@ function gdacsPayload(now: number): string {
   return JSON.stringify({ type: "FeatureCollection", features });
 }
 
+// ─── NWS ─────────────────────────────────────────────────────────────────
+
+function nwsPayload(now: number): string {
+  const epoch = epochOf(now);
+  const iso = (t: number) => new Date(t).toISOString().replace(/\.\d{3}Z$/, "+00:00");
+  const box = (lat: number, lon: number, d = 0.12) => ({
+    type: "Polygon",
+    coordinates: [[[lon - d, lat - d], [lon + d, lat - d], [lon + d, lat + d], [lon - d, lat + d], [lon - d, lat - d]]],
+  });
+  let n = 0;
+  const alert = (o: {
+    event: string; severity: string; certainty?: string; urgency?: string; area: string; sent: number; ends: number;
+    geometry: unknown; vtec?: string; messageType?: string; params?: Record<string, string[]>;
+  }) => {
+    n++;
+    const id = `urn:oid:2.49.0.1.840.0.sim${n}`;
+    return {
+      id: `${SIM}/nws/alerts/${id}`,
+      type: "Feature",
+      geometry: o.geometry,
+      properties: {
+        "@id": `${SIM}/nws/alerts/${id}`, "@type": "wx:Alert", id, areaDesc: o.area,
+        sent: iso(o.sent), effective: iso(o.sent), onset: iso(o.sent), expires: iso(o.ends), ends: iso(o.ends),
+        status: "Actual", messageType: o.messageType ?? "Alert", category: "Met",
+        severity: o.severity, certainty: o.certainty ?? "Likely", urgency: o.urgency ?? "Immediate",
+        event: o.event, senderName: "NWS Sim Office", headline: `${o.event} issued for ${o.area}`,
+        description: `Simulated ${o.event.toLowerCase()} for pipeline tests.`,
+        parameters: { ...(o.vtec ? { VTEC: [o.vtec] } : {}), ...(o.params ?? {}) },
+      },
+    };
+  };
+  const vt = (action: string, office: string, ph: string, etn: string) => `/O.${action}.${office}.${ph}.W.${etn}.260928T0500Z-260928T0700Z/`;
+  const features = [
+    // A tornado warning and its later update: one event after VTEC dedupe.
+    alert({ event: "Tornado Warning", severity: "Extreme", certainty: "Observed", area: "Tulsa, OK; Wagoner, OK", sent: epoch - 40 * MIN, ends: epoch + 45 * MIN, geometry: box(36.1, -95.8), vtec: vt("NEW", "KTSA", "TO", "0042"), params: { tornadoDetection: ["OBSERVED"], tornadoDamageThreat: ["CONSIDERABLE"] } }),
+    alert({ event: "Tornado Warning", severity: "Extreme", certainty: "Observed", area: "Tulsa, OK; Wagoner, OK; Rogers, OK", sent: epoch - 15 * MIN, ends: epoch + 45 * MIN, geometry: box(36.15, -95.7), vtec: vt("CON", "KTSA", "TO", "0042"), messageType: "Update", params: { tornadoDetection: ["OBSERVED"] } }),
+    alert({ event: "Flash Flood Warning", severity: "Severe", area: "Harris, TX", sent: epoch - 70 * MIN, ends: epoch + 2 * HOUR, geometry: box(29.76, -95.37, 0.2), vtec: vt("NEW", "KHGX", "FF", "0107") }),
+    alert({ event: "Severe Thunderstorm Warning", severity: "Severe", area: "Polk, IA", sent: epoch - 25 * MIN, ends: epoch + 30 * MIN, geometry: box(41.6, -93.6), vtec: vt("NEW", "KDMX", "SV", "0311") }),
+    // Zone-based: no polygon of its own.
+    alert({ event: "Winter Storm Warning", severity: "Severe", area: "Northern Cascades", sent: epoch - 3 * HOUR, ends: epoch + DAY, geometry: null }),
+    // Below the severity bar.
+    alert({ event: "Flood Advisory", severity: "Minor", area: "Dade, FL", sent: epoch - HOUR, ends: epoch + HOUR, geometry: box(25.8, -80.2) }),
+    // Cancelled early.
+    alert({ event: "Tornado Warning", severity: "Extreme", area: "Hinds, MS", sent: epoch - 20 * MIN, ends: epoch + 10 * MIN, geometry: box(32.3, -90.2), vtec: vt("CAN", "KJAN", "TO", "0017"), messageType: "Update" }),
+    // Malformed: no event name.
+    { type: "Feature", geometry: box(40, -100), properties: { id: "urn:oid:broken", areaDesc: "Nowhere", sent: iso(epoch), status: "Actual", messageType: "Alert", severity: "Severe" } },
+  ];
+  return JSON.stringify({ type: "FeatureCollection", features });
+}
+
 // ─── GDELT ───────────────────────────────────────────────────────────────
 
 type Mix = Array<[string, number]>;
@@ -303,6 +354,26 @@ const SLUGS: Record<string, string[]> = {
   "20": ["reports of mass casualties emerge from {p}"],
 };
 
+/** Actor-country pairs (CAMEO alpha-3) per theatre, for link-analysis fixtures. */
+const PAIRS: Record<string, Array<[string, string]>> = {
+  Kharkiv: [["RUS", "UKR"], ["UKR", "RUS"]],
+  Donetsk: [["RUS", "UKR"]],
+  Zaporizhzhia: [["RUS", "UKR"]],
+  Kherson: [["RUS", "UKR"]],
+  Kyiv: [["RUS", "UKR"]],
+  Odesa: [["RUS", "UKR"]],
+  Belgorod: [["UKR", "RUS"]],
+  Gaza: [["ISR", "PSE"]],
+  "Khan Yunis": [["ISR", "PSE"]],
+  Beirut: [["ISR", "LBN"]],
+  Hodeidah: [["USA", "YEM"]],
+  Taipei: [["CHN", "TWN"]],
+  Tehran: [["IRN", "ISR"]],
+  Washington: [["USA", "CHN"]],
+  Beijing: [["CHN", "USA"]],
+  Geneva: [["USA", "RUS"]],
+};
+
 function slugFor(r: Rand, code: string, place: string): string {
   const opts = SLUGS[code.slice(0, 3)] ?? SLUGS[code.slice(0, 2)] ?? ["developing situation in {p}"];
   return slug(pick(r, opts).replace("{p}", place));
@@ -352,6 +423,11 @@ function gdeltTsv(fileMs: number): string {
       c[6] = a1;
       c[15] = a2.slice(0, 3);
       c[16] = a2;
+      const pair = PAIRS[place] ? pick(r, PAIRS[place]) : null;
+      if (pair) {
+        c[7] = pair[0];
+        c[17] = pair[1];
+      }
       c[25] = "1";
       c[26] = code;
       c[27] = code.slice(0, 3);
@@ -444,7 +520,7 @@ const HEADLINES: Array<[string, number]> = [
 
 function wireFeed(url: string, now: number): string {
   const epoch = epochOf(now);
-  const which = Math.max(0, WIRE_FEEDS.findIndex((f) => f.url === url)) % 3;
+  const which = Math.max(0, WIRE_FEEDS.findIndex((f) => f.urls.includes(url))) % 3;
   const r = mulberry32(seedOf(`wire:${which}:${epoch}`));
   const items = HEADLINES.filter((_, i) => (i + which) % 3 !== 2 || r() > 0.5).map(([title, hoursAgo]) => {
     const t = epoch - (hoursAgo + which * 0.4) * HOUR;
@@ -509,9 +585,10 @@ export function fixtureTransport(now: number): Transport {
   const text = async (url: string): Promise<string> => {
     if (url === USGS_URL) return usgsPayload(now);
     if (url === EONET_URL) return eonetPayload(now);
-    if (url === GDACS_URL) return gdacsPayload(now);
+    if (url.startsWith(`${GDACS_API}/SEARCH`)) return gdacsPayload(now);
+    if (url.startsWith(NWS_API)) return nwsPayload(now);
     if (url.endsWith(GDELT_LASTUPDATE_PATH)) return gdeltManifest(now);
-    if (WIRE_FEEDS.some((f) => f.url === url)) return wireFeed(url, now);
+    if (WIRE_FEEDS.some((f) => f.urls[0] === url)) return wireFeed(url, now);
     if (CITIES.some((c) => url.startsWith(c.url("").split("?")[0]))) return crimePayload(url, now);
     throw new Error(`fixture transport: nothing for ${url}`);
   };

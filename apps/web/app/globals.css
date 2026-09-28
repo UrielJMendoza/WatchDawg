@@ -259,6 +259,15 @@
   color: hsl(var(--muted));
   font-weight: 500;
 }
+/* Phones: labels near the limb would otherwise run off-screen. */
+@media (max-width: 640px) {
+  .hotspot-marker .hm-name {
+    max-width: 96px;
+  }
+  .hotspot-marker .hm-count {
+    display: none;
+  }
+}
 
 /* cmdk group headings */
 [cmdk-group-heading] {
@@ -275,4 +284,9 @@ main article a {
   text-decoration: underline;
   text-underline-offset: 2px;
   text-decoration-color: hsl(var(--muted) / 0.6);
+}
+
+/* Floating menus sit over busy panels: keep them near-opaque. */
+.panel-solid {
+  background: hsl(var(--surface) / 0.98);
 }

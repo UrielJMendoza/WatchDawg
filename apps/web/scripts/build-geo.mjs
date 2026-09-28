@@ -1,7 +1,8 @@
 /**
  * Regenerate the static geo assets WatchDawg ships with:
  *
- *   public/geo/countries.geojson   admin-0 polygons (Natural Earth 110m via world-atlas)
+ *   public/geo/countries.geojson     admin-0 polygons (Natural Earth 110m via world-atlas)
+ *   public/geo/countries-50m.geojson  detailed polygons, loaded when zoomed in (50m, simplified)
  *   lib/osint/data/gazetteer.json  countries + major cities for search, fly-to
  *                                  and headline geocoding
  *
@@ -14,6 +15,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const topojson = require("topojson-client");
 const topo = require("world-atlas/countries-110m.json");
+const topo50 = require("world-atlas/countries-50m.json");
 const countries = require("world-countries");
 const cities = require("all-the-cities");
 
@@ -63,6 +65,45 @@ function mainlandBbox(g) {
   return [round(w), round(s), round(e), round(n)];
 }
 
+/** Douglas–Peucker on a ring, tolerance in degrees. */
+function simplifyRing(ring, tol) {
+  if (ring.length <= 4) return ring;
+  const keep = new Uint8Array(ring.length);
+  keep[0] = keep[ring.length - 1] = 1;
+  const stack = [[0, ring.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    const [ax, ay] = ring[a];
+    const [bx, by] = ring[b];
+    const dx = bx - ax, dy = by - ay;
+    const len = Math.hypot(dx, dy);
+    let best = -1, bestD = 0;
+    for (let i = a + 1; i < b; i++) {
+      // Closed rings start and end on the same point: fall back to point distance.
+      const d = len < 1e-12
+        ? Math.hypot(ring[i][0] - ax, ring[i][1] - ay)
+        : Math.abs(dy * ring[i][0] - dx * ring[i][1] + bx * ay - by * ax) / len;
+      if (d > bestD) { bestD = d; best = i; }
+    }
+    if (best > 0 && bestD > tol) {
+      keep[best] = 1;
+      stack.push([a, best], [best, b]);
+    }
+  }
+  const out = ring.filter((_, i) => keep[i]);
+  return out.length >= 4 ? out : null;
+}
+
+function simplifyGeometry(g, tol) {
+  if (!g) return null;
+  if (g.type === "Polygon") {
+    const rings = g.coordinates.map((r) => simplifyRing(r, tol)).filter(Boolean);
+    return rings.length ? { type: "Polygon", coordinates: rings } : null;
+  }
+  const polys = g.coordinates.map((p) => p.map((r) => simplifyRing(r, tol)).filter(Boolean)).filter((p) => p.length);
+  return polys.length ? { type: "MultiPolygon", coordinates: polys } : null;
+}
+
 const byNumeric = new Map(countries.map((c) => [c.ccn3, c]));
 const fc = topojson.feature(topo, topo.objects.countries);
 
@@ -87,6 +128,20 @@ writeFileSync(
   "public/geo/countries.geojson",
   JSON.stringify({ type: "FeatureCollection", features }),
 );
+
+const features50 = [];
+for (const f of topojson.feature(topo50, topo50.objects.countries).features) {
+  const meta = byNumeric.get(String(f.id).padStart(3, "0"));
+  const geometry = simplifyGeometry(roundGeometry(f.geometry), 0.02);
+  if (!geometry) continue;
+  features50.push({
+    type: "Feature",
+    id: features50.length,
+    properties: { iso2: meta?.cca2 ?? "", name: meta?.name.common ?? f.properties.name },
+    geometry,
+  });
+}
+writeFileSync("public/geo/countries-50m.geojson", JSON.stringify({ type: "FeatureCollection", features: features50 }));
 
 const countryRows = countries
   .filter((c) => c.latlng?.length === 2)
@@ -137,7 +192,7 @@ writeFileSync(
   JSON.stringify({ countries: countryRows, cities: cityRows }),
 );
 
-for (const p of ["public/geo/countries.geojson", "lib/osint/data/gazetteer.json"]) {
+for (const p of ["public/geo/countries.geojson", "public/geo/countries-50m.geojson", "lib/osint/data/gazetteer.json"]) {
   console.log(`${p}: ${(statSync(p).size / 1024).toFixed(0)} KiB`);
 }
 console.log(`${features.length} country shapes, ${countryRows.length} countries, ${cityRows.length} cities`);

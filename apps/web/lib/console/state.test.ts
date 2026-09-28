@@ -32,7 +32,7 @@ describe("console filters", () => {
   });
 
   it("round-trips URL state for every selection kind", () => {
-    for (const sel of ["i:abc", "h:def", "c:UA", "a:ae1234", "s:25544"]) {
+    for (const sel of ["i:abc", "h:def", "c:UA", "a:ae1234", "s:25544", "r:RU>UA"]) {
       const u = readUrlState(`?sel=${sel}&w=7d&q=cat%3Aconflict`);
       expect(writeUrlState(u)).toBe(`?w=7d&q=cat%3Aconflict&sel=${encodeURIComponent(sel)}`);
     }

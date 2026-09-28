@@ -8,7 +8,7 @@
  * incidents concentrate.
  */
 
-export type SourceId = "usgs" | "eonet" | "gdacs" | "gdelt" | "acled" | "crime" | "wire";
+export type SourceId = "usgs" | "eonet" | "gdacs" | "nws" | "gdelt" | "acled" | "crime" | "wire";
 
 export type Category =
   | "conflict"
@@ -62,6 +62,11 @@ export interface Signal {
   time: number;
   /** Epoch ms of the earliest observation folded into this signal. */
   firstTime?: number;
+  /**
+   * The location is a guess (a demonym, or a country a machine coder
+   * assigned), so the same story reported elsewhere may be the real place.
+   */
+  geoWeak?: boolean;
   /** 0..1 — how bad is it. */
   severity: number;
   /** 0..1 — how strong is the evidence within this one source. */
@@ -129,6 +134,27 @@ export interface Hotspot {
   /** Incident counts per time bin across the window, oldest first. */
   spark: number[];
   incidentIds: string[];
+}
+
+/**
+ * A directed country→country interaction aggregated from machine-coded news:
+ * "actor from A did something to actor from B", weighted by coverage.
+ */
+export interface Relation {
+  id: string;
+  from: string;
+  to: string;
+  events: number;
+  articles: number;
+  outlets: number;
+  /** Article-weighted mean Goldstein score: −10 (hostile) … +10 (cooperative). */
+  goldstein: number;
+  tone: number;
+  stance: "hostile" | "mixed" | "cooperative";
+  category: Category;
+  lastSeen: number;
+  /** Articles per bin across the window, oldest first. */
+  spark: number[];
 }
 
 export type SourceStatus = "ok" | "degraded" | "offline" | "disabled";
@@ -199,6 +225,7 @@ export interface Snapshot {
   window: WindowKey;
   incidents: Incident[];
   hotspots: Hotspot[];
+  relations: Relation[];
   sources: SourceHealth[];
   stats: SnapshotStats;
   timeline: Timeline;

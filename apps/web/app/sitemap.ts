@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import gazetteerJson from "@/lib/osint/data/gazetteer.json";
 import type { GazetteerData } from "@/lib/osint/gazetteer";
 import { countrySlug, siteUrl } from "@/lib/site";
+import { TOPICS } from "@/lib/seo/topics";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = siteUrl();
@@ -10,6 +11,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: base, lastModified: now, changeFrequency: "always", priority: 1 },
     { url: `${base}/methodology`, lastModified: now, changeFrequency: "monthly", priority: 0.5 },
+    ...TOPICS.map((t) => ({ url: `${base}/live/${t.slug}`, lastModified: now, changeFrequency: "always" as const, priority: 0.9 })),
     ...gaz.countries.map((c) => ({
       url: `${base}/region/${countrySlug(c.name, c.iso2)}`,
       lastModified: now,

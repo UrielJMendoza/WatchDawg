@@ -26,7 +26,7 @@ async function LiveBrief() {
       {
         "@type": "Dataset",
         name: "WatchDawg live incident snapshot",
-        description: "Fused, validated incidents from USGS, NASA EONET, GDACS, GDELT, ACLED, police open data and newsrooms.",
+        description: "Fused, validated incidents from USGS, NASA EONET, GDACS, NWS, GDELT, ACLED, police open data and newsrooms.",
         url: `${siteUrl()}/api/v1/snapshot`,
         isAccessibleForFree: true,
         dateModified: snap ? new Date(snap.generatedAt).toISOString() : undefined,

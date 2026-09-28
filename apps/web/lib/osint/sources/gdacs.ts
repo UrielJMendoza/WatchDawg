@@ -8,7 +8,24 @@ import type { CollectContext, CollectResult, SourceAdapter } from "./types";
  * Alert levels are modelled from hazard intensity × exposed population.
  * https://www.gdacs.org/
  */
-export const GDACS_URL = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/MAP";
+export const GDACS_API = "https://www.gdacs.org/gdacsapi/api/events/geteventlist";
+
+const ymd = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+/**
+ * GDACS exposes the same event list through several endpoints and has
+ * changed which ones accept bare requests; try them in order of richness.
+ */
+export function gdacsUrls(now: number): string[] {
+  const types = "EQ;TC;FL;VO;DR;WF";
+  const from = ymd(now - 30 * 86_400_000);
+  const to = ymd(now + 86_400_000);
+  return [
+    `${GDACS_API}/SEARCH?eventlist=${types}&fromDate=${from}&toDate=${to}&alertlevel=Green;Orange;Red`,
+    `${GDACS_API}/EVENTS4APP`,
+    `${GDACS_API}/MAP?eventtypes=${types}`,
+  ];
+}
 
 const Feature = z.object({
   geometry: z.object({ type: z.string(), coordinates: z.unknown() }).nullable(),
@@ -92,7 +109,9 @@ export function parseGdacs(json: unknown, ctx: Pick<CollectContext, "now" | "hor
       ledger.reject(coordErr ?? "coord.missing");
       continue;
     }
-    const time = parseUtc(p.todate ?? p.datemodified ?? p.fromdate);
+    // todate can be a forecast horizon for cyclones; the last modification is
+    // when GDACS last observed the event.
+    const time = Math.min(parseUtc(p.datemodified ?? p.todate ?? p.fromdate), ctx.now);
     const timeErr = checkTime(time, ctx.now, Math.max(ctx.horizonMs, 30 * 86_400_000));
     if (timeErr) {
       if (timeErr === "window.stale") ledger.filter(timeErr);
@@ -151,7 +170,24 @@ export const gdacs: SourceAdapter = {
     coverage: "Current alerts · updated every few minutes",
   },
   async collect(ctx) {
-    const text = await ctx.transport.text(GDACS_URL);
-    return parseGdacs(JSON.parse(text), ctx);
+    const errors: string[] = [];
+    for (const url of gdacsUrls(ctx.now)) {
+      const endpoint = url.slice(GDACS_API.length + 1).split("?")[0];
+      try {
+        const result = parseGdacs(JSON.parse(await ctx.transport.text(url)), ctx);
+        return {
+          ...result,
+          integrity: {
+            check: "endpoint",
+            passed: 1,
+            total: 1,
+            detail: `via ${endpoint}${errors.length ? ` (after ${errors.join("; ")})` : ""}`,
+          },
+        };
+      } catch (err) {
+        errors.push(`${endpoint}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    throw new Error(errors.join("; "));
   },
 };

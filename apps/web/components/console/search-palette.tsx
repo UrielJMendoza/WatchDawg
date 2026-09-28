@@ -66,7 +66,7 @@ export function SearchPalette(p: Props) {
     } else if (hasFilters(parsed.filters)) {
       incidents = [...filtered].sort((a, b) => b.severity * b.confidence - a.severity * a.confidence);
     } else {
-      incidents = [...p.incidents].sort((a, b) => b.lastSeen - a.lastSeen).filter((i) => i.severity >= 0.6);
+      incidents = [...p.incidents].sort((a, b) => b.firstSeen - a.firstSeen).filter((i) => i.severity >= 0.6);
     }
     const places = parsed.text && placeIdx.current ? searchPlaces(placeIdx.current, parsed.text, 6) : [];
     const hotspots = parsed.text ? searchHotspots(p.hotspots, parsed.text) : q ? [] : p.hotspots.slice(0, 4);
@@ -197,7 +197,7 @@ export function SearchPalette(p: Props) {
                     <span className="min-w-0 flex-1">
                       <span className="block truncate">{i.title}</span>
                       <span className="block truncate text-[11px] text-muted-foreground">
-                        {CATEGORIES[i.category].label} · {i.place} · {ago(i.lastSeen, p.now)}
+                        {CATEGORIES[i.category].label} · {i.place} · {ago(i.firstSeen, p.now)}
                       </span>
                     </span>
                     <GradeBadge reliability={i.reliability} credibility={i.credibility} />

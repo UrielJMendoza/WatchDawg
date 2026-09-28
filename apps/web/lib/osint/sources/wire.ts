@@ -1,6 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 import type { Signal } from "../types";
-import { classifyText, TEXT_SEVERITY } from "../taxonomy";
+import { MIN_TEXT_SCORE, NOT_AN_EVENT, classifyText, TEXT_SEVERITY } from "../taxonomy";
 import { geocodeText, type GazetteerData } from "../gazetteer";
 import { checkTime, clamp01, cleanText, hashId, hostOf, Ledger, safeUrl } from "../validate";
 import type { CollectContext, CollectResult, SourceAdapter } from "./types";
@@ -11,22 +11,24 @@ import type { CollectContext, CollectResult, SourceAdapter } from "./types";
  * the human-written counterpart to GDELT's machine coding: when both put the
  * same kind of event in the same place, the incident is corroborated.
  */
-export const WIRE_FEEDS: Array<{ outlet: string; url: string }> = [
-  { outlet: "BBC News", url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
-  { outlet: "Al Jazeera", url: "https://www.aljazeera.com/xml/rss/all.xml" },
-  { outlet: "The Guardian", url: "https://www.theguardian.com/world/rss" },
-  { outlet: "The New York Times", url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml" },
-  { outlet: "France 24", url: "https://www.france24.com/en/rss" },
-  { outlet: "Deutsche Welle", url: "https://rss.dw.com/rdf/rss-en-world" },
-  { outlet: "UN News", url: "https://news.un.org/feed/subscribe/en/news/all/rss.xml" },
-  { outlet: "NPR", url: "https://feeds.npr.org/1004/rss.xml" },
-  { outlet: "Sky News", url: "https://feeds.skynews.com/feeds/rss/world.xml" },
-  { outlet: "CBC News", url: "https://www.cbc.ca/webfeed/rss/rss-world" },
-  { outlet: "The Kyiv Independent", url: "https://kyivindependent.com/rss/" },
-  { outlet: "The Times of Israel", url: "https://www.timesofisrael.com/feed/" },
-  { outlet: "Africanews", url: "https://www.africanews.com/feed/rss" },
-  { outlet: "Middle East Eye", url: "https://www.middleeasteye.net/rss" },
-  { outlet: "NPR (US news)", url: "https://feeds.npr.org/1003/rss.xml" },
+/** Each outlet lists candidate feed URLs, tried in order. */
+export const WIRE_FEEDS: Array<{ outlet: string; urls: string[] }> = [
+  { outlet: "BBC News", urls: ["https://feeds.bbci.co.uk/news/world/rss.xml"] },
+  { outlet: "Al Jazeera", urls: ["https://www.aljazeera.com/xml/rss/all.xml"] },
+  { outlet: "The Guardian", urls: ["https://www.theguardian.com/world/rss"] },
+  { outlet: "The New York Times", urls: ["https://rss.nytimes.com/services/xml/rss/nyt/World.xml"] },
+  { outlet: "France 24", urls: ["https://www.france24.com/en/rss"] },
+  { outlet: "Deutsche Welle", urls: ["https://rss.dw.com/rdf/rss-en-world"] },
+  { outlet: "UN News", urls: ["https://news.un.org/feed/subscribe/en/news/all/rss.xml"] },
+  { outlet: "NPR", urls: ["https://feeds.npr.org/1004/rss.xml"] },
+  { outlet: "Sky News", urls: ["https://feeds.skynews.com/feeds/rss/world.xml"] },
+  // CBC's feeds time out from cloud regions; The Independent answers.
+  { outlet: "The Independent", urls: ["https://www.independent.co.uk/news/world/rss"] },
+  { outlet: "The Kyiv Independent", urls: ["https://kyivindependent.com/news-archive/rss/", "https://kyivindependent.com/feed/"] },
+  { outlet: "The Jerusalem Post", urls: ["https://www.jpost.com/rss/rssfeedsheadlines.aspx", "https://www.timesofisrael.com/feed/"] },
+  { outlet: "Africanews", urls: ["https://www.africanews.com/feed/rss"] },
+  { outlet: "Middle East Eye", urls: ["https://www.middleeasteye.net/rss"] },
+  { outlet: "NPR (US news)", urls: ["https://feeds.npr.org/1003/rss.xml"] },
 ];
 
 const MAX_AGE_MS = 48 * 3_600_000;
@@ -124,8 +126,12 @@ export function itemsToSignals(
       continue;
     }
     const summary = cleanText(it.description, 400);
-    const cls = classifyText(title) ?? classifyText(`${title} ${summary}`);
-    if (!cls) {
+    // The title should carry the event. Falling back to the summary needs
+    // stronger evidence: summaries mention "the war" in stories about heat pumps.
+    const byTitle = classifyText(title);
+    const fromTitle = !!byTitle && byTitle.score >= MIN_TEXT_SCORE;
+    const cls = fromTitle ? byTitle : classifyText(`${title} ${summary}`);
+    if (!cls || cls.score < (fromTitle ? MIN_TEXT_SCORE : MIN_TEXT_SCORE + 1) || NOT_AN_EVENT.test(title)) {
       ledger.filter("relevance.unclassified");
       continue;
     }
@@ -154,6 +160,7 @@ export function itemsToSignals(
       precision: geo.precision,
       place: geo.place,
       country: geo.country,
+      ...(geo.weak ? { geoWeak: true } : {}),
       time,
       severity,
       quality: 0.6,
@@ -173,7 +180,7 @@ export const wire: SourceAdapter = {
     kind: "Editorial newsrooms (RSS)",
     reliability: "B",
     homepage: "https://www.bbc.com/news/world",
-    description: "Headlines from 15 newsrooms (BBC, Al Jazeera, NYT, Guardian, France 24, DW, UN News, NPR, Sky, CBC, Kyiv Independent, Times of Israel, Africanews, Middle East Eye) — classified and geocoded.",
+    description: "Headlines from 15 newsrooms (BBC, Al Jazeera, NYT, Guardian, France 24, DW, UN News, NPR, Sky, The Independent, Kyiv Independent, Jerusalem Post, Africanews, Middle East Eye) — classified and geocoded.",
     ttlMs: 4 * 60_000,
     maxStaleMs: 6 * 3_600_000,
     coverage: "Past 48 hours · polled every 4 minutes",
@@ -182,17 +189,34 @@ export const wire: SourceAdapter = {
     const ledger = new Ledger();
     const seen = new Set<string>();
     const feeds = WIRE_FEEDS;
-    const results = await Promise.allSettled(
-      feeds.map(async (f) => ({ f, items: parseFeedXml(await ctx.transport.text(f.url)) })),
-    );
+    const fetchFeed = async (f: (typeof feeds)[number]) => {
+      // One 8 s budget per newsroom, shared by its candidate URLs.
+      const deadline = Date.now() + 8_000;
+      let last: unknown;
+      for (const url of f.urls) {
+        const timeoutMs = deadline - Date.now();
+        if (timeoutMs < 1_000) break;
+        try {
+          return { f, items: parseFeedXml(await ctx.transport.text(url, { timeoutMs })) };
+        } catch (err) {
+          last = err;
+        }
+      }
+      throw last instanceof Error ? last : new Error("unreachable");
+    };
+    const results = await Promise.allSettled(feeds.map(fetchFeed));
     const signals: Signal[] = [];
+    const failed: string[] = [];
     let ok = 0;
-    for (const r of results) {
-      if (r.status !== "fulfilled") continue;
+    results.forEach((r, i) => {
+      if (r.status !== "fulfilled") {
+        failed.push(`${feeds[i].outlet} (${r.reason instanceof Error ? r.reason.message : "error"})`);
+        return;
+      }
       ok++;
       signals.push(...itemsToSignals(r.value.items, r.value.f.outlet, ctx.gazetteer, ctx.now, ledger, seen));
-    }
-    if (!ok) throw new Error("All news wire feeds unreachable");
+    });
+    if (!ok) throw new Error(`All news wire feeds unreachable: ${failed.join("; ")}`);
     return {
       signals,
       ledger,
@@ -200,7 +224,7 @@ export const wire: SourceAdapter = {
         check: "feeds",
         passed: ok,
         total: feeds.length,
-        detail: `${ok} of ${feeds.length} newsroom feeds parsed`,
+        detail: `${ok} of ${feeds.length} newsroom feeds parsed${failed.length ? ` · failed: ${failed.join(", ")}` : ""}`,
       },
     };
   },

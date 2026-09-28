@@ -1,8 +1,17 @@
 import { createHash } from "node:crypto";
 import { unzipSync } from "fflate";
 import type { Category, GeoPrecision, Signal } from "../types";
-import { CAMEO_ROOTS_KEPT, cameo } from "../taxonomy";
-import { stripDiacritics, type GazetteerData } from "../gazetteer";
+import {
+  CAMEO_ROOTS_KEPT,
+  LEGAL_VOCAB,
+  MIN_TEXT_SCORE,
+  NOT_AN_EVENT,
+  VIOLENCE_VOCAB,
+  cameo,
+  classifyText,
+  domainOf,
+} from "../taxonomy";
+import { countryByIso3, geocodeText, stripDiacritics, type GazetteerData } from "../gazetteer";
 import {
   checkCoords,
   checkTime,
@@ -13,7 +22,7 @@ import {
   safeUrl,
   titleCase,
 } from "../validate";
-import type { CollectContext, CollectResult, SourceAdapter, Transport } from "./types";
+import type { CollectContext, CollectResult, RelationObs, SourceAdapter, Transport } from "./types";
 
 /**
  * GDELT 2.0 Event Database — machine-coded events from worldwide news,
@@ -33,7 +42,9 @@ import type { CollectContext, CollectResult, SourceAdapter, Transport } from "./
 const HOSTS = ["http://data.gdeltproject.org", "https://data.gdeltproject.org"];
 export const GDELT_LASTUPDATE_PATH = "/gdeltv2/lastupdate.txt";
 const STEP_MS = 15 * 60_000;
-const MAX_FILES_PER_PULL = 8;
+// 24 exports = 6 hours; a fresh server has a full day after four pulls (~5 min),
+// and with stale-while-revalidate only the first pull is ever awaited.
+const MAX_FILES_PER_PULL = 24;
 const MAX_GROUPS = 1600;
 const COLUMNS = 61;
 
@@ -49,6 +60,9 @@ interface Row {
   tone: number;
   actor1: string;
   actor2: string;
+  /** CAMEO actor country codes (ISO alpha-3 for states). */
+  actor1Country: string;
+  actor2Country: string;
   geoType: number;
   geoName: string;
   lat: number;
@@ -172,7 +186,9 @@ export function parseExport(tsv: string, now: number, horizonMs: number): { rows
       continue;
     }
     rows.push({
-      time,
+      // DATEADDED stamps the end of the 15-minute window, which can be
+      // minutes ahead of the fetch; nothing is reported from the future.
+      time: Math.min(time, now),
       code: c[26],
       category: meta.category,
       label: meta.label,
@@ -183,6 +199,8 @@ export function parseExport(tsv: string, now: number, horizonMs: number): { rows
       tone: Number(c[34]) || 0,
       actor1: c[6],
       actor2: c[16],
+      actor1Country: c[7],
+      actor2Country: c[17],
       geoType,
       geoName: c[52],
       lat,
@@ -272,6 +290,8 @@ function topActors(rows: Row[]): string[] {
     .map(([a]) => titleCase(a));
 }
 
+const VIOLENT = new Set<Category>(["conflict", "security", "crime", "unrest"]);
+
 export function groupsToSignals(
   rows: Row[],
   gaz: GazetteerData,
@@ -298,28 +318,114 @@ export function groupsToSignals(
       toneSum += r.tone * r.articles;
       severity = Math.max(severity, r.severity);
     }
+    // Cross-validate violent coding against the article's own words. CAMEO
+    // assigns "assault" to court reporting and "fight" to sports and tax
+    // disputes; a headline with no violent vocabulary vetoes the coding.
+    // The lead article's URL may be an opaque id; any well-covered article
+    // in the group can supply the headline (and then becomes the link).
+    const nouns = [lead.geoName, ...topActors(g.rows)];
+    let src = lead;
+    let headline = headlineFromUrl(lead.url, nouns);
+    for (const r of [...g.rows].sort((a, b) => b.articles - a.articles).slice(0, 6)) {
+      if (headline) break;
+      headline = headlineFromUrl(r.url, nouns);
+      if (headline) src = r;
+    }
+    let category = lead.category;
+    let label = lead.label;
+    // Every GDELT event needs the article's own words to check the coding
+    // against. Without a headline it is "Threat — Ashdown Forest": one
+    // outlet, nothing to verify, nothing to read.
+    if (!headline) {
+      ledger.filter("evidence.unverifiable");
+      continue;
+    }
+    if (domainOf(lead.category) === "security") {
+      // Violence needs the article's own words to agree: GDELT codes
+      // "military force" for capitals standing in for governments, and
+      // "kill" for film titles.
+      const cls = classifyText(headline);
+      if (
+        !VIOLENCE_VOCAB.test(headline) ||
+        NOT_AN_EVENT.test(headline) ||
+        !cls ||
+        cls.score < MIN_TEXT_SCORE ||
+        !VIOLENT.has(cls.category)
+      ) {
+        ledger.filter("relevance.headline_mismatch");
+        continue;
+      }
+      // Violence claims need two independent outlets: single-outlet local
+      // stories are GDELT's biggest source of false alarms.
+      if (g.outlets.size < 2) {
+        ledger.filter("evidence.single_outlet");
+        continue;
+      }
+      // Courts, robberies and murders are crime, not war.
+      if (LEGAL_VOCAB.test(headline) || cls.category === "crime") {
+        category = "crime";
+        label = "Crime report";
+      }
+    } else {
+      // Civil coding gets the same cross-check: GDELT filed a coffee chain
+      // closing stores as "tension" and a legal essay as "protest".
+      const cls = classifyText(headline);
+      if (!cls || cls.score < MIN_TEXT_SCORE || NOT_AN_EVENT.test(headline) || domainOf(cls.category) === "hazard") {
+        ledger.filter("relevance.headline_mismatch");
+        continue;
+      }
+      if (cls.category === "crime") {
+        category = "crime";
+        label = "Crime report";
+      }
+    }
     const attention = Math.min(1, Math.log10(1 + g.articles) / 2);
-    const place = lead.geoName.split(",")[0].trim() || lead.geoName;
-    signals.push({
-      key: `gdelt:${key}`,
-      source: "gdelt",
-      category: lead.category,
-      title: `${lead.label} — ${place}`,
-      headline: headlineFromUrl(lead.url, [lead.geoName, ...topActors(g.rows)]),
-      url: lead.url,
-      outlet: lead.outlet,
+    const geoName = lead.geoName.replace(/\s*\(general\)/gi, "");
+    let geo: { lat: number; lon: number; precision: GeoPrecision; place: string; country?: string } = {
       lat: lead.lat,
       lon: lead.lon,
       precision,
-      place: lead.geoName,
-      country: countryFromPlace(gaz, lead.geoName),
+      place: geoName,
+      country: countryFromPlace(gaz, geoName),
+    };
+    // Country-level fixes are GDELT's weakest geography (a strike in
+    // Rakhine State coded to Bangladesh). When the article's own headline
+    // names another country, or a city, the headline wins.
+    let relocated = false;
+    if (precision === "country" && headline) {
+      const hg = geocodeText(gaz, headline);
+      // A demonym alone ("Israeli army…") names an actor, not the place.
+      if (hg && !hg.weak && (hg.country !== geo.country || hg.precision !== "country")) {
+        geo = { lat: hg.lat, lon: hg.lon, precision: hg.precision, place: hg.place, country: hg.country };
+        relocated = true;
+      }
+    }
+    const place = geo.place.split(",")[0].trim() || geo.place;
+    signals.push({
+      key: `gdelt:${key}`,
+      source: "gdelt",
+      category,
+      title: `${label} — ${place}`,
+      headline,
+      url: src.url,
+      outlet: src.outlet,
+      lat: geo.lat,
+      lon: geo.lon,
+      precision: geo.precision,
+      place: geo.place,
+      country: geo.country,
+      ...(geo.precision === "country" && !relocated ? { geoWeak: true } : {}),
       time,
       firstTime: first,
-      severity: clamp01(severity * (0.75 + 0.25 * attention) * (precision === "country" ? 0.85 : 1)),
+      severity: clamp01(severity * (0.75 + 0.25 * attention) * (geo.precision === "country" ? 0.85 : 1)),
       quality: clamp01(0.2 + 0.15 * Math.log2(1 + g.outlets.size) + 0.1 * Math.log10(1 + g.articles)),
       reports: g.articles,
       actors: topActors(g.rows),
-      tags: [`cameo:${lead.code}`, ...(g.outlets.size > 1 ? ["multi-outlet"] : ["single-outlet"])],
+      tags: [
+        `cameo:${lead.code}`,
+        ...(g.outlets.size > 1 ? ["multi-outlet"] : ["single-outlet"]),
+        ...(relocated ? ["located-by-headline"] : []),
+      ],
       metrics: {
         articles: g.articles,
         outlets: g.outlets.size,
@@ -329,7 +435,12 @@ export function groupsToSignals(
       },
     });
   }
-  signals.sort((a, b) => b.severity * Math.log2(1 + b.reports) - a.severity * Math.log2(1 + a.reports));
+  // Keep the strongest groups, weighted towards the newest: a day of
+  // exports must not crowd the last hour out of the 1h view.
+  const newest = signals.reduce((m, s) => Math.max(m, s.time), 0);
+  const weight = (s: Signal) =>
+    s.severity * Math.log2(1 + s.reports) * (1 - 0.6 * Math.min(1, (newest - s.time) / 86_400_000));
+  signals.sort((a, b) => weight(b) - weight(a));
   if (signals.length > MAX_GROUPS) {
     for (let i = MAX_GROUPS; i < signals.length; i++) ledger.filter("volume.cap");
     signals.length = MAX_GROUPS;
@@ -406,6 +517,7 @@ export const gdelt: SourceAdapter = {
     const signals = groupsToSignals(rows, ctx.gazetteer, ledger);
     return {
       signals,
+      relations: relationObservations(rows, ctx.gazetteer),
       ledger,
       integrity: {
         check: "md5",
@@ -416,6 +528,31 @@ export const gdelt: SourceAdapter = {
     };
   },
 };
+
+/**
+ * Actor-country pairs: rows where both actors are identified with different
+ * states. Regional pseudo-codes (AFR, EUR, …) don't resolve and are dropped.
+ */
+export function relationObservations(rows: Row[], gaz: GazetteerData): RelationObs[] {
+  const out: RelationObs[] = [];
+  for (const r of rows) {
+    if (!r.actor1Country || !r.actor2Country || r.actor1Country === r.actor2Country) continue;
+    const a = countryByIso3(gaz, r.actor1Country);
+    const b = countryByIso3(gaz, r.actor2Country);
+    if (!a || !b || a.iso2 === b.iso2) continue;
+    out.push({
+      from: a.iso2,
+      to: b.iso2,
+      time: r.time,
+      articles: r.articles,
+      outlet: r.outlet,
+      goldstein: r.goldstein,
+      tone: r.tone,
+      category: r.category,
+    });
+  }
+  return out;
+}
 
 /** Test hook. */
 export function _resetGdeltCache(): void {

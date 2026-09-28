@@ -1,11 +1,11 @@
-import type { Reliability, Signal, SourceId } from "../types";
+import type { Category, Reliability, Signal, SourceId } from "../types";
 import type { Ledger } from "../validate";
 import type { GazetteerData } from "../gazetteer";
 
 /** Byte/text fetcher. Production uses the network; tests inject recorded or
  * synthesised upstream payloads so the same parsers run offline. */
 export interface Transport {
-  text(url: string, init?: { headers?: Record<string, string>; method?: string; body?: string }): Promise<string>;
+  text(url: string, init?: { headers?: Record<string, string>; method?: string; body?: string; timeoutMs?: number }): Promise<string>;
   bytes(url: string): Promise<Uint8Array>;
 }
 
@@ -33,8 +33,21 @@ export interface CollectContext {
   gazetteer: GazetteerData;
 }
 
+/** One actor-country → actor-country observation (GDELT). */
+export interface RelationObs {
+  from: string;
+  to: string;
+  time: number;
+  articles: number;
+  outlet: string;
+  goldstein: number;
+  tone: number;
+  category: Category;
+}
+
 export interface CollectResult {
   signals: Signal[];
+  relations?: RelationObs[];
   ledger: Ledger;
   integrity?: { check: string; passed: number; total: number; detail?: string };
 }

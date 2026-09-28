@@ -57,7 +57,8 @@ const DOMAIN_ALIASES: Record<string, Domain> = {
 
 const SOURCE_ALIASES: Record<string, SourceId> = {
   usgs: "usgs", eonet: "eonet", nasa: "eonet", gdacs: "gdacs", gdelt: "gdelt",
-  wire: "wire", news: "wire", rss: "wire",
+  wire: "wire", news: "wire", rss: "wire", acled: "acled", crime: "crime", police: "crime",
+  nws: "nws", noaa: "nws", weather: "nws",
 };
 
 function tokenize(q: string): string[] {

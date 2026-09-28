@@ -134,7 +134,8 @@ export function headlineFromUrl(url: string | undefined, properNouns: string[] =
   }
   if (!best) return undefined;
   const words = best
-    .split(/[-_+]+/)
+    // "26588657.men-arrested-…": ids glued to the first word with a dot.
+    .split(/[-_+]+|(?<=\d)\.(?=[a-z])/i)
     .filter((w) => w && !/^\d{5,}$/.test(w) && !/^[0-9a-f]{8,}$/i.test(w) && !/^(amp|html|index|article|story|news)$/i.test(w));
   const alpha = words.filter((w) => /^[a-z']+$/i.test(w));
   if (alpha.length < 4 || alpha.length / words.length < 0.7) return undefined;
@@ -144,14 +145,21 @@ export function headlineFromUrl(url: string | undefined, properNouns: string[] =
     for (const w of n.split(/[\s,'’-]+/)) if (w.length > 2) proper.set(w.toLowerCase(), w);
   }
   const text = words
-    .map((w) => proper.get(w.toLowerCase()) ?? w)
+    .map((w) => proper.get(w.toLowerCase()) ?? ACRONYMS[w.toLowerCase()] ?? w)
     .join(" ")
+    // "britain-s-gaza" → "britain's gaza"
+    .replace(/(\w) s\b/g, "$1's")
     .replace(/\s+/g, " ")
     .trim();
   if (text.length < 20) return undefined;
   const capped = text.length > 140 ? `${text.slice(0, 139).replace(/\s+\S*$/, "")}…` : text;
   return capped.charAt(0).toUpperCase() + capped.slice(1);
 }
+
+const ACRONYMS: Record<string, string> = {
+  us: "US", uk: "UK", un: "UN", eu: "EU", nato: "NATO", idf: "IDF", fbi: "FBI", cia: "CIA",
+  isis: "ISIS", iaea: "IAEA", imf: "IMF", g7: "G7", g20: "G20", uae: "UAE", drc: "DRC",
+};
 
 function decodeURIComponentSafe(s: string): string {
   try {

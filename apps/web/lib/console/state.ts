@@ -8,7 +8,8 @@ export type Selection =
   | { kind: "hotspot"; id: string }
   | { kind: "country"; iso2: string }
   | { kind: "air"; id: string }
-  | { kind: "sat"; id: string };
+  | { kind: "sat"; id: string }
+  | { kind: "rel"; id: string };
 
 export interface LayerState {
   heat: boolean;
@@ -20,6 +21,8 @@ export interface LayerState {
   air: boolean;
   /** Satellites (stations, military, Earth observation, weather). */
   sats: boolean;
+  /** Country-to-country interaction arcs. */
+  links: boolean;
 }
 
 export const DEFAULT_LAYERS: LayerState = {
@@ -30,6 +33,7 @@ export const DEFAULT_LAYERS: LayerState = {
   rotate: true,
   air: true,
   sats: true,
+  links: true,
 };
 
 /** Everything that narrows the incident set. Stats panels write into this. */
@@ -112,6 +116,7 @@ export function readUrlState(search: string): UrlState {
   else if (sel?.startsWith("c:")) selection = { kind: "country", iso2: sel.slice(2).toUpperCase() };
   else if (sel?.startsWith("a:")) selection = { kind: "air", id: sel.slice(2).toLowerCase() };
   else if (sel?.startsWith("s:")) selection = { kind: "sat", id: sel.slice(2) };
+  else if (sel && /^r:[A-Z]{2}>[A-Z]{2}$/.test(sel)) selection = { kind: "rel", id: sel.slice(2) };
   const cc = p.get("cc");
   return {
     window: isWindowKey(w) ? w : "24h",
@@ -143,6 +148,8 @@ export function selectionKey(s: Selection): string {
       return `a:${s.id}`;
     case "sat":
       return `s:${s.id}`;
+    case "rel":
+      return `r:${s.id}`;
   }
 }
 
