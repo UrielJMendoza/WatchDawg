@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { ArrowDownRight, ArrowUpRight, ExternalLink, Minus, RotateCcw, X } from "lucide-react";
 import type { Category, Domain, Hotspot, Incident, SourceHealth, SourceId } from "@/lib/osint/types";
+import type { FeedHealth } from "@/lib/osint/tracks/types";
 import { CATEGORIES, CATEGORY_ORDER, DOMAINS, DOMAIN_ORDER, domainOf } from "@/lib/osint/taxonomy";
 import type { FilterState, LayerState, Selection } from "@/lib/console/state";
 import { DEFAULT_FILTERS, activeFilterCount, fatalitiesOf } from "@/lib/console/state";
@@ -20,6 +21,8 @@ interface Props {
   visible: Incident[];
   hotspots: Hotspot[];
   sources: SourceHealth[];
+  /** Health of the tracks feeds (aircraft, satellites). */
+  feeds: FeedHealth[];
   filters: FilterState;
   onFilters: (f: FilterState) => void;
   layers: LayerState;
@@ -197,6 +200,12 @@ function FiltersTab({ all, visible, filters: f, onFilters, layers, onLayers, bas
           <Toggle checked={layers.pulses} onChange={(v) => onLayers({ ...layers, pulses: v })} label="Live pulses (last 90 min)" />
           <Toggle checked={layers.rotate} onChange={(v) => onLayers({ ...layers, rotate: v })} label="Auto-rotate when idle" />
         </div>
+      </section>
+
+      <section className="space-y-1">
+        <SectionTitle>Live tracks</SectionTitle>
+        <Toggle checked={layers.air} onChange={(v) => onLayers({ ...layers, air: v })} label="Military & emergency aircraft (ADS-B)" />
+        <Toggle checked={layers.sats} onChange={(v) => onLayers({ ...layers, sats: v })} label="Satellites (SGP4, live)" />
       </section>
     </div>
   );
@@ -442,68 +451,81 @@ function Bars({ rows }: { rows: Array<{ key: string; label: string; value: numbe
 
 // ─── Sources (validation ledger) ──────────────────────────────────────────
 
-function SourcesTab({ sources, now }: Props) {
+type CardData = Pick<
+  SourceHealth,
+  "name" | "homepage" | "status" | "statusNote" | "reliability" | "received" | "accepted" | "filtered" | "rejected" | "reasons" | "fetchedAt" | "latencyMs" | "coverage"
+> & { kind?: string; newest?: number | null };
+
+function SourcesTab({ sources, feeds, now }: Props) {
   return (
     <div className="space-y-3">
       <p className="text-[11px] leading-relaxed text-muted-foreground">
         Every record is schema-checked, range-checked and time-checked before it can reach the map. Reliability is the NATO Admiralty
         source grade; incidents earn credibility only through independent corroboration.
       </p>
-      {sources.map((s) => {
-        const total = Math.max(1, s.received);
-        const reasons = Object.entries(s.reasons).sort((a, b) => b[1] - a[1]).slice(0, 5);
-        return (
-          <article key={s.id} className="rounded-sm border border-border bg-surface-2/30 p-2.5">
-            <header className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <a href={s.homepage} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[13px] font-medium hover:underline">
-                  {s.name}
-                  <ExternalLink className="h-3 w-3 text-muted-foreground" aria-hidden />
-                </a>
-                <div className="text-[10px] text-muted-foreground">{s.kind}</div>
-              </div>
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <StatusLabel status={s.status} />
-                <span className="font-mono text-[10px] text-muted-foreground" title="Admiralty source reliability">
-                  Grade {s.reliability}
-                </span>
-              </div>
-            </header>
-            {s.statusNote && <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">{s.statusNote}</p>}
-            {s.received > 0 && (
-              <>
-                <div className="mt-2 flex h-1.5 gap-px overflow-hidden rounded-full" aria-hidden>
-                  <span className="bg-good" style={{ width: `${(s.accepted / total) * 100}%` }} />
-                  <span className="bg-muted-foreground/40" style={{ width: `${(s.filtered / total) * 100}%` }} />
-                  <span className="bg-critical" style={{ width: `${(s.rejected / total) * 100}%` }} />
-                </div>
-                <dl className="mt-1.5 grid grid-cols-4 gap-1 font-mono text-[10px]">
-                  <Stat k="Received" v={s.received} />
-                  <Stat k="Accepted" v={s.accepted} />
-                  <Stat k="Filtered" v={s.filtered} />
-                  <Stat k="Rejected" v={s.rejected} />
-                </dl>
-                {reasons.length > 0 && (
-                  <ul className="mt-1.5 flex flex-wrap gap-1">
-                    {reasons.map(([k, v]) => (
-                      <li key={k} className="rounded-sm bg-surface-2 px-1 py-0.5 font-mono text-[9px] text-muted-foreground">
-                        {k} · {v}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            )}
-            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[9px] text-muted-foreground">
-              {s.fetchedAt && <span>pulled {ago(s.fetchedAt, now)}</span>}
-              {s.latencyMs != null && <span>{s.latencyMs} ms</span>}
-              {s.newest && <span>newest {ago(s.newest, now)}</span>}
-              {s.coverage && <span className="w-full">{s.coverage}</span>}
-            </div>
-          </article>
-        );
-      })}
+      {sources.map((s) => (
+        <SourceCard key={s.id} s={s} now={now} />
+      ))}
+      {feeds.length > 0 && <SectionTitle className="pt-2">Live tracks</SectionTitle>}
+      {feeds.map((f) => (
+        <SourceCard key={f.id} s={f} now={now} />
+      ))}
     </div>
+  );
+}
+
+function SourceCard({ s, now }: { s: CardData; now: number }) {
+  const total = Math.max(1, s.received);
+  const reasons = Object.entries(s.reasons).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  return (
+    <article className="rounded-sm border border-border bg-surface-2/30 p-2.5">
+      <header className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <a href={s.homepage} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[13px] font-medium hover:underline">
+            {s.name}
+            <ExternalLink className="h-3 w-3 text-muted-foreground" aria-hidden />
+          </a>
+          {s.kind && <div className="text-[10px] text-muted-foreground">{s.kind}</div>}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <StatusLabel status={s.status} />
+          <span className="font-mono text-[10px] text-muted-foreground" title="Admiralty source reliability">
+            Grade {s.reliability}
+          </span>
+        </div>
+      </header>
+      {s.statusNote && <p className="mt-1.5 text-[10px] leading-snug text-muted-foreground">{s.statusNote}</p>}
+      {s.received > 0 && (
+        <>
+          <div className="mt-2 flex h-1.5 gap-px overflow-hidden rounded-full" aria-hidden>
+            <span className="bg-good" style={{ width: `${(s.accepted / total) * 100}%` }} />
+            <span className="bg-muted-foreground/40" style={{ width: `${(s.filtered / total) * 100}%` }} />
+            <span className="bg-critical" style={{ width: `${(s.rejected / total) * 100}%` }} />
+          </div>
+          <dl className="mt-1.5 grid grid-cols-4 gap-1 font-mono text-[10px]">
+            <Stat k="Received" v={s.received} />
+            <Stat k="Accepted" v={s.accepted} />
+            <Stat k="Filtered" v={s.filtered} />
+            <Stat k="Rejected" v={s.rejected} />
+          </dl>
+          {reasons.length > 0 && (
+            <ul className="mt-1.5 flex flex-wrap gap-1">
+              {reasons.map(([k, v]) => (
+                <li key={k} className="rounded-sm bg-surface-2 px-1 py-0.5 font-mono text-[9px] text-muted-foreground">
+                  {k} · {v}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+      <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-[9px] text-muted-foreground">
+        {s.fetchedAt && <span>pulled {ago(s.fetchedAt, now)}</span>}
+        {s.latencyMs != null && <span>{s.latencyMs} ms</span>}
+        {s.newest && <span>newest {ago(s.newest, now)}</span>}
+        {s.coverage && <span className="w-full">{s.coverage}</span>}
+      </div>
+    </article>
   );
 }
 

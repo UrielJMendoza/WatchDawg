@@ -1,8 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Crosshair, ExternalLink, Filter, Link2, X } from "lucide-react";
+import { AlertOctagon, Check, Crosshair, ExternalLink, Filter, Link2, Plane, Satellite, X } from "lucide-react";
 import type { Hotspot, Incident, SourceHealth } from "@/lib/osint/types";
+import type { AirTrack, SatElement } from "@/lib/osint/tracks/types";
+import { periodMinutes, satState } from "@/lib/console/orbits";
 import { CATEGORIES, DOMAINS, DOMAIN_ORDER, domainOf, severityLabel } from "@/lib/osint/taxonomy";
 import { formatDms, haversineKm } from "@/lib/osint/geo";
 import type { CountryRow } from "@/lib/osint/gazetteer";
@@ -14,6 +16,8 @@ import { CategoryTag, DomainSwatch, GradeBadge, Meter, SectionTitle, Sparkline }
 
 interface Props {
   selection: Selection | null;
+  aircraft: AirTrack[];
+  satellites: SatElement[];
   incidents: Incident[];
   byId: Map<string, Incident>;
   hotspots: Hotspot[];
@@ -37,6 +41,14 @@ export function Inspector(p: Props) {
     if (h) return <HotspotDossier h={h} {...p} />;
   }
   if (sel?.kind === "country") return <CountryDossier iso2={sel.iso2} {...p} />;
+  if (sel?.kind === "air") {
+    const a = p.aircraft.find((x) => x.id === sel.id);
+    if (a) return <AirDossier a={a} {...p} />;
+  }
+  if (sel?.kind === "sat") {
+    const sat = p.satellites.find((x) => x.id === sel.id);
+    if (sat) return <SatDossier sat={sat} {...p} />;
+  }
   return <Feed {...p} />;
 }
 
@@ -342,6 +354,146 @@ function CountryDossier({ iso2, incidents, now, onSelect, country, onFilterCount
             <Crosshair className="h-3 w-3" /> Fly to
           </button>
         )}
+        <CopyLink />
+      </footer>
+    </div>
+  );
+}
+
+// ─── Tracks ───────────────────────────────────────────────────────────────
+
+const EMERGENCY_TEXT: Record<string, string> = {
+  general: "General emergency (7700)",
+  radio: "Radio failure (7600)",
+  hijack: "Unlawful interference (7500)",
+  medical: "Medical / lifeguard",
+  fuel: "Minimum fuel",
+  downed: "Aircraft downed",
+  unlawful: "Unlawful interference",
+};
+
+function Rows({ rows }: { rows: Array<[string, React.ReactNode]> }) {
+  return (
+    <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-1.5 text-xs">
+      {rows.map(([k, v]) => (
+        <FragmentPair key={k} k={k} v={v} />
+      ))}
+    </dl>
+  );
+}
+
+function FragmentPair({ k, v }: { k: string; v: React.ReactNode }) {
+  return (
+    <>
+      <dt className="text-muted-foreground">{k}</dt>
+      <dd className="font-mono text-[11px]">{v}</dd>
+    </>
+  );
+}
+
+function AirDossier({ a, onSelect, onFlyTo }: Props & { a: AirTrack }) {
+  const title = a.callsign ?? a.registration ?? a.id.toUpperCase();
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <Header
+        kicker={
+          <span className="chip">
+            <Plane className="h-3 w-3" aria-hidden /> {a.military ? "Military aircraft" : "Aircraft"}
+          </span>
+        }
+        title={title}
+        onClose={() => onSelect(null)}
+      >
+        <p className="mt-1 text-xs text-muted-foreground">{[a.description, a.type].filter(Boolean).join(" · ") || "Type unknown"}</p>
+      </Header>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3">
+        {a.emergency !== "none" && (
+          <div className="flex items-start gap-2 rounded-sm border border-critical/50 bg-critical/10 px-3 py-2 text-xs text-critical">
+            <AlertOctagon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <div>
+              <div className="font-semibold uppercase tracking-wide">Emergency</div>
+              <div className="text-foreground/85">{EMERGENCY_TEXT[a.emergency] ?? a.emergency}</div>
+            </div>
+          </div>
+        )}
+        <Rows
+          rows={[
+            ["ICAO address", a.id.toUpperCase()],
+            ["Registration", a.registration ?? "—"],
+            ["Position", formatDms(a.lat, a.lon)],
+            ["Altitude", a.onGround ? "On ground" : a.altitude != null ? `${a.altitude.toLocaleString()} ft` : "—"],
+            ["Ground speed", a.speed != null ? `${Math.round(a.speed)} kt` : "—"],
+            ["Track", a.heading != null ? `${Math.round(a.heading)}°` : "—"],
+            ["Squawk", a.squawk ?? "—"],
+            ["Position age", `${a.positionAge} s`],
+          ]}
+        />
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          Position from community ADS-B receivers. Aircraft that disable their transponders or aren&apos;t in range of a receiver are not shown.
+        </p>
+      </div>
+      <footer className="flex items-center gap-1.5 border-t border-border px-4 py-2">
+        <button type="button" onClick={() => onFlyTo(a.lat, a.lon, 7)} className="chip hover:text-foreground">
+          <Crosshair className="h-3 w-3" /> Fly to
+        </button>
+        <a href={`https://adsb.lol/?icao=${a.id}`} target="_blank" rel="noreferrer" className="chip hover:text-foreground">
+          <ExternalLink className="h-3 w-3" /> Track history
+        </a>
+        <CopyLink />
+      </footer>
+    </div>
+  );
+}
+
+const GROUP_LABEL: Record<string, string> = {
+  stations: "Space station",
+  military: "Military",
+  resource: "Earth observation",
+  weather: "Weather",
+};
+
+function SatDossier({ sat, now, onSelect, onFlyTo }: Props & { sat: SatElement }) {
+  const st = satState(sat, new Date(now || Date.now()));
+  const period = periodMinutes(sat.meanMotion);
+  const epochAgeDays = ((now || Date.now()) - sat.epoch) / 86_400_000;
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <Header
+        kicker={
+          <span className="chip">
+            <Satellite className="h-3 w-3" aria-hidden /> {GROUP_LABEL[sat.group] ?? sat.group}
+          </span>
+        }
+        title={sat.name}
+        onClose={() => onSelect(null)}
+      >
+        <p className="mt-1 font-mono text-[11px] text-muted-foreground">NORAD {sat.id}</p>
+      </Header>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3">
+        <Rows
+          rows={[
+            ["Sub-satellite point", st ? formatDms(st.lat, st.lon) : "—"],
+            ["Altitude", st ? `${Math.round(st.altKm).toLocaleString()} km` : "—"],
+            ["Velocity", st ? `${st.speedKms.toFixed(2)} km/s` : "—"],
+            ["Inclination", `${sat.inclination.toFixed(2)}°`],
+            ["Period", Number.isFinite(period) ? `${period.toFixed(1)} min` : "—"],
+            ["Element set age", `${epochAgeDays.toFixed(1)} days`],
+          ]}
+        />
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          Position propagated live in your browser with SGP4 from a checksum-validated CelesTrak element set. The dashed line is the ground
+          track ±50 minutes.
+        </p>
+      </div>
+      <footer className="flex items-center gap-1.5 border-t border-border px-4 py-2">
+        {st && (
+          <button type="button" onClick={() => onFlyTo(st.lat, st.lon, 2.4)} className="chip hover:text-foreground">
+            <Crosshair className="h-3 w-3" /> Fly to
+          </button>
+        )}
+        <a href={`https://celestrak.org/satcat/table-satcat.php?CATNR=${sat.id}`} target="_blank" rel="noreferrer" className="chip hover:text-foreground">
+          <ExternalLink className="h-3 w-3" /> SATCAT
+        </a>
         <CopyLink />
       </footer>
     </div>

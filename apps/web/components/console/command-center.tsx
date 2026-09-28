@@ -3,8 +3,10 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { PanelLeft, PanelRight, X } from "lucide-react";
+import { PanelLeft, PanelRight, Plane, Satellite, X } from "lucide-react";
 import type { Incident, Snapshot, WindowKey } from "@/lib/osint/types";
+import type { AirPayload, SpacePayload } from "@/lib/osint/tracks/types";
+import { satState } from "@/lib/console/orbits";
 import { DOMAINS, DOMAIN_ORDER, CATEGORIES } from "@/lib/osint/taxonomy";
 import { countryByIso2, type GazetteerData } from "@/lib/osint/gazetteer";
 import { hasFilters, matchesFilters, parseQuery } from "@/lib/osint/query";
@@ -23,7 +25,7 @@ import {
 import { altitudeKm, ago, compact } from "@/lib/console/format";
 import type { Basemap } from "@/lib/map/style";
 import { cn } from "@/lib/utils";
-import type { CameraCommand, ViewInfo } from "./globe";
+import type { CameraCommand, HoverTarget, ViewInfo } from "./globe";
 import { TopBar } from "./top-bar";
 import { LeftRail, type RailTab } from "./left-rail";
 import { Inspector } from "./inspector";
@@ -43,10 +45,10 @@ const Globe = dynamic(() => import("./globe"), {
 const REFRESH_MS = 60_000;
 const FRESH_MS = 5 * 60_000;
 
-async function fetcher(url: string): Promise<Snapshot> {
+async function fetcher<T = Snapshot>(url: string): Promise<T> {
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`Snapshot request failed (${res.status})`);
-  return res.json() as Promise<Snapshot>;
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return res.json() as Promise<T>;
 }
 
 export default function CommandCenter({ initial }: { initial: Snapshot | null }) {
@@ -78,7 +80,7 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
   const [tab, setTab] = useState<RailTab>("filters");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [camera, setCamera] = useState<CameraCommand | null>(null);
-  const [hover, setHover] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [hover, setHover] = useState<HoverTarget | null>(null);
   const [cursor, setCursor] = useState<{ lat: number; lon: number } | null>(null);
   const [view, setView] = useState<ViewInfo>({ zoom: 2, lat: 24, lon: 18, bearing: 0, pitch: 0 });
   const [mobilePanel, setMobilePanel] = useState<"none" | "rail" | "inspector">("none");
@@ -111,6 +113,19 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
     fallbackData: initial && initial.window === window_ ? initial : undefined,
   });
   const snap = data ?? null;
+
+  // Tracks: fetched only while their layer is on.
+  const { data: airData } = useSWR<AirPayload>(layers.air ? "/api/v1/tracks/air" : null, fetcher, {
+    refreshInterval: 20_000,
+    keepPreviousData: true,
+  });
+  const { data: spaceData } = useSWR<SpacePayload>(layers.sats ? "/api/v1/tracks/space" : null, fetcher, {
+    refreshInterval: 30 * 60_000,
+    revalidateOnFocus: false,
+  });
+  const aircraft = useMemo(() => (layers.air ? airData?.aircraft ?? [] : []), [layers.air, airData]);
+  const satellites = useMemo(() => (layers.sats ? spaceData?.satellites ?? [] : []), [layers.sats, spaceData]);
+  const feeds = useMemo(() => [airData?.health, spaceData?.health].filter((h): h is NonNullable<typeof h> => !!h), [airData, spaceData]);
   const all = useMemo(() => snap?.incidents ?? [], [snap]);
   const byId = useMemo(() => new Map(all.map((i) => [i.id, i])), [all]);
 
@@ -162,9 +177,16 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
       } else if (s?.kind === "country") {
         const c = countryRow(s.iso2);
         if (c) setCamera({ key: Date.now(), lat: c.lat, lon: c.lon, bbox: c.bbox ?? undefined, zoom: 4 });
+      } else if (s?.kind === "air") {
+        const a = aircraft.find((x) => x.id === s.id);
+        if (a) setCamera({ key: Date.now(), lat: a.lat, lon: a.lon, zoom: 6 });
+      } else if (s?.kind === "sat") {
+        const sat = satellites.find((x) => x.id === s.id);
+        const st = sat ? satState(sat, new Date()) : null;
+        if (st) setCamera({ key: Date.now(), lat: st.lat, lon: st.lon, zoom: 2.4 });
       }
     },
-    [byId, snap, countryRow],
+    [byId, snap, countryRow, aircraft, satellites],
   );
 
   // Deep link: fly to the URL's selection once its target is resolvable.
@@ -174,11 +196,13 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
     const ready =
       (selection.kind === "incident" && byId.has(selection.id)) ||
       (selection.kind === "hotspot" && !!snap?.hotspots.some((h) => h.id === selection.id)) ||
-      (selection.kind === "country" && !!gaz);
+      (selection.kind === "country" && !!gaz) ||
+      (selection.kind === "air" && aircraft.some((a) => a.id === selection.id)) ||
+      (selection.kind === "sat" && satellites.some((x) => x.id === selection.id));
     if (!ready) return;
     deepLinked.current = true;
     select(selection);
-  }, [hydrated, selection, byId, snap, gaz, select]);
+  }, [hydrated, selection, byId, snap, gaz, aircraft, satellites, select]);
 
   const onCommand = (c: PaletteCommand) => {
     if (c.type === "window") setWindow(c.window);
@@ -208,7 +232,10 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
     return () => window.removeEventListener("keydown", onKey);
   }, [paletteOpen]);
 
-  const hovered = hover ? byId.get(hover.id) : undefined;
+  const hovered = hover?.kind === "incident" ? byId.get(hover.id) : undefined;
+  const hoveredAir = hover?.kind === "air" ? aircraft.find((a) => a.id === hover.id) : undefined;
+  const hoveredSat = hover?.kind === "sat" ? satellites.find((x) => x.id === hover.id) : undefined;
+  const emergencies = aircraft.filter((a) => a.emergency !== "none").length;
   const sources = snap?.sources ?? [];
   const uplinkDown = !!snap && sources.every((s) => s.status === "offline" || s.status === "disabled");
   const critical = visible.filter((i) => i.severity >= 0.8).length;
@@ -235,6 +262,8 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
         <div className="space absolute inset-0">
           <Globe
             incidents={visible}
+            aircraft={aircraft}
+            satellites={satellites}
             hotspots={visibleHotspots}
             selection={selection}
             layers={layers}
@@ -267,6 +296,20 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
             </span>
             <span className="h-3 w-px bg-border" />
             <span className="text-muted-foreground">last {window_}</span>
+            {(layers.air || layers.sats) && <span className="hidden h-3 w-px bg-border md:block" />}
+            {layers.air && (
+              <span className="hidden items-center gap-1 md:flex" title="Military and emergency-squawk aircraft">
+                <Plane className="h-3 w-3 text-muted-foreground" aria-hidden />
+                <span className="text-foreground">{aircraft.length}</span>
+                {emergencies > 0 && <span className="text-critical">· {emergencies} emerg</span>}
+              </span>
+            )}
+            {layers.sats && (
+              <span className="hidden items-center gap-1 md:flex" title="Tracked satellites">
+                <Satellite className="h-3 w-3 text-muted-foreground" aria-hidden />
+                <span className="text-foreground">{satellites.length}</span>
+              </span>
+            )}
           </div>
           {query && (
             <div className="pointer-events-auto flex items-center gap-1 rounded-sm border border-primary/40 bg-surface/90 py-0.5 pl-2 pr-1 font-mono text-[10px] text-primary">
@@ -301,6 +344,35 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
           </div>
         )}
 
+        {hover && (hoveredAir || hoveredSat) && (
+          <div className="panel pointer-events-none absolute z-30 max-w-[260px] rounded-sm px-2.5 py-2" style={{ left: hover.x + 16, top: hover.y + 16 }}>
+            {hoveredAir && (
+              <>
+                <div className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                  <Plane className="h-3 w-3" aria-hidden />
+                  {hoveredAir.military ? "Military aircraft" : "Aircraft"}
+                  {hoveredAir.emergency !== "none" && <span className="text-critical">· squawk {hoveredAir.squawk ?? "EMRG"}</span>}
+                </div>
+                <div className="mt-1 text-xs font-medium">{hoveredAir.callsign ?? hoveredAir.registration ?? hoveredAir.id.toUpperCase()}</div>
+                <div className="text-[10px] text-muted-foreground">
+                  {[hoveredAir.description ?? hoveredAir.type, hoveredAir.onGround ? "on ground" : hoveredAir.altitude != null ? `${hoveredAir.altitude.toLocaleString()} ft` : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+              </>
+            )}
+            {hoveredSat && (
+              <>
+                <div className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                  <Satellite className="h-3 w-3" aria-hidden />
+                  Satellite · NORAD {hoveredSat.id}
+                </div>
+                <div className="mt-1 text-xs font-medium">{hoveredSat.name}</div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Left rail */}
         <aside
           className={cn(
@@ -317,6 +389,7 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
             visible={visible}
             hotspots={snap?.hotspots ?? []}
             sources={sources}
+            feeds={feeds}
             filters={filters}
             onFilters={setFilters}
             layers={layers}
@@ -341,6 +414,8 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
         >
           <Inspector
             selection={selection}
+            aircraft={aircraft}
+            satellites={satellites}
             incidents={visible}
             byId={byId}
             hotspots={snap?.hotspots ?? []}

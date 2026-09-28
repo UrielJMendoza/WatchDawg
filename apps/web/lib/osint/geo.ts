@@ -86,10 +86,11 @@ export function formatLatLon(lat: number, lon: number, digits = 4): string {
 /** Degrees → DMS, the way analysts read coordinates off a chart. */
 export function formatDms(lat: number, lon: number): string {
   const part = (v: number, pos: string, neg: string) => {
-    const a = Math.abs(v);
-    const d = Math.floor(a);
-    const m = Math.floor((a - d) * 60);
-    const s = Math.round(((a - d) * 60 - m) * 60);
+    // Round once in whole seconds so 59.6″ carries into the minute, never "60″".
+    const total = Math.round(Math.abs(v) * 3600);
+    const d = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
     return `${d}°${String(m).padStart(2, "0")}′${String(s).padStart(2, "0")}″${v >= 0 ? pos : neg}`;
   };
   return `${part(lat, "N", "S")} ${part(lon, "E", "W")}`;

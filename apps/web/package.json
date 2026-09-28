@@ -43,6 +43,7 @@
     "react-dom": "19.2.8",
     "react-map-gl": "^8.0.0",
     "recharts": "^2.13.3",
+    "satellite.js": "^6.0.2",
     "server-only": "^0.0.1",
     "swr": "^2.5.1",
     "tailwind-merge": "^2.5.4",

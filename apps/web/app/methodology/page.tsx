@@ -45,6 +45,25 @@ export default function Methodology() {
           ))}
         </ul>
 
+        <h2 className="text-lg font-semibold text-foreground">Live tracks</h2>
+        <ul className="space-y-3">
+          <li>
+            <span className="font-medium text-foreground">ADS-B networks (adsb.lol, airplanes.live)</span>{" "}
+            <span className="text-muted-foreground">
+              — military-flagged aircraft and emergency squawks (7500 / 7600 / 7700), refreshed every 15 seconds. Positions older than 90
+              seconds, impossible speeds or altitudes and malformed ICAO addresses are dropped.
+            </span>
+          </li>
+          <li>
+            <span className="font-medium text-foreground">CelesTrak</span>{" "}
+            <span className="text-muted-foreground">
+              — orbital element sets for space stations, military, Earth-observation and weather satellites. Each line&apos;s mod-10
+              checksum, catalogue number and epoch are verified and an SGP4 propagation must succeed before a satellite is drawn;
+              positions are then propagated live in the browser.
+            </span>
+          </li>
+        </ul>
+
         <h2 className="text-lg font-semibold text-foreground">Validation</h2>
         <ol className="list-decimal space-y-1.5 pl-5">
           <li><strong>Integrity.</strong> GDELT exports are checked against the MD5 published in their manifest before parsing.</li>

@@ -6,7 +6,9 @@ import type { Basemap } from "@/lib/map/style";
 export type Selection =
   | { kind: "incident"; id: string }
   | { kind: "hotspot"; id: string }
-  | { kind: "country"; iso2: string };
+  | { kind: "country"; iso2: string }
+  | { kind: "air"; id: string }
+  | { kind: "sat"; id: string };
 
 export interface LayerState {
   heat: boolean;
@@ -14,6 +16,10 @@ export interface LayerState {
   hotspots: boolean;
   pulses: boolean;
   rotate: boolean;
+  /** Military and emergency-squawk aircraft. */
+  air: boolean;
+  /** Satellites (stations, military, Earth observation, weather). */
+  sats: boolean;
 }
 
 export const DEFAULT_LAYERS: LayerState = {
@@ -22,6 +28,8 @@ export const DEFAULT_LAYERS: LayerState = {
   hotspots: true,
   pulses: true,
   rotate: true,
+  air: true,
+  sats: true,
 };
 
 /** Everything that narrows the incident set. Stats panels write into this. */
@@ -96,6 +104,8 @@ export function readUrlState(search: string): UrlState {
   if (sel?.startsWith("i:")) selection = { kind: "incident", id: sel.slice(2) };
   else if (sel?.startsWith("h:")) selection = { kind: "hotspot", id: sel.slice(2) };
   else if (sel?.startsWith("c:")) selection = { kind: "country", iso2: sel.slice(2).toUpperCase() };
+  else if (sel?.startsWith("a:")) selection = { kind: "air", id: sel.slice(2).toLowerCase() };
+  else if (sel?.startsWith("s:")) selection = { kind: "sat", id: sel.slice(2) };
   const cc = p.get("cc");
   return {
     window: isWindowKey(w) ? w : "24h",
@@ -109,15 +119,25 @@ export function writeUrlState(s: UrlState): string {
   const p = new URLSearchParams();
   if (s.window !== "24h") p.set("w", s.window);
   if (s.query) p.set("q", s.query);
-  if (s.selection) {
-    p.set(
-      "sel",
-      s.selection.kind === "incident" ? `i:${s.selection.id}` : s.selection.kind === "hotspot" ? `h:${s.selection.id}` : `c:${s.selection.iso2}`,
-    );
-  }
+  if (s.selection) p.set("sel", selectionKey(s.selection));
   if (s.country) p.set("cc", s.country);
   const q = p.toString();
   return q ? `?${q}` : "";
+}
+
+export function selectionKey(s: Selection): string {
+  switch (s.kind) {
+    case "incident":
+      return `i:${s.id}`;
+    case "hotspot":
+      return `h:${s.id}`;
+    case "country":
+      return `c:${s.iso2}`;
+    case "air":
+      return `a:${s.id}`;
+    case "sat":
+      return `s:${s.id}`;
+  }
 }
 
 export type { Basemap };

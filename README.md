@@ -19,6 +19,7 @@
   | City police open data | Serious crime reports, San Francisco + Chicago (block-level; sex offences and domestic incidents excluded) | A |
   | 15 newsrooms (RSS) | BBC, Al Jazeera, NYT, Guardian, France 24, DW, UN News, NPR, Sky, CBC, Kyiv Independent, Times of Israel, Africanews, Middle East Eye — classified and geocoded | B |
   | GDELT 2.0 | Machine-coded conflict/unrest/diplomacy events from world news, every 15 minutes | C |
+- **Live tracks** — military-flagged aircraft and emergency squawks (7500/7600/7700) from ADS-B networks (adsb.lol, airplanes.live), refreshed every 15 s; satellites (stations, military, Earth observation, weather) from checksum-validated CelesTrak element sets, propagated live in the browser with SGP4 and drawn with ground tracks.
 - **Validation** — integrity (GDELT MD5 vs manifest), strict schemas (zod), coordinate/time/URL range checks, relevance and evidence thresholds, privacy filters. Every dropped record is counted by reason in the **Sources** panel.
 - **Fusion** — observations of the same event close in space and time merge into one incident. Confidence is a noisy-OR over *independent* sources; each incident carries a NATO **Admiralty grade** (e.g. `A1`, `B2`, `C3`).
 - **Aggregation** — hotspots ranked by activity index (severity × confidence), with trend and sparkline.
@@ -42,6 +43,8 @@ apps/api/                       FastAPI service (earlier phase; not required by 
 
 - `GET /api/v1/snapshot?window=24h` — incidents, hotspots, timeline, stats and per-source health (`1h | 6h | 24h | 7d | 30d`). Edge-cached for 30 s.
 - `GET /api/v1/sources` — validation ledger and status per source.
+- `GET /api/v1/tracks/air` — military and emergency-squawk aircraft (edge-cached 15 s).
+- `GET /api/v1/tracks/space` — validated orbital element sets (edge-cached 30 min).
 
 ## Run it
 
