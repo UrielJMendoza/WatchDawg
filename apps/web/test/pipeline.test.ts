@@ -97,6 +97,38 @@ describe("pipeline on fixture upstreams", () => {
     expect(g.status).toBe("degraded");
   });
 
+  it("falls back across GDACS endpoints and says which one answered", async () => {
+    const base = fixtureTransport(NOW);
+    const t: Transport = {
+      async text(url, init) {
+        if (url.includes("/geteventlist/SEARCH")) throw new Error("HTTP 400 from www.gdacs.org");
+        if (url.includes("/geteventlist/EVENTS4APP")) return base.text(url.replace("EVENTS4APP", "SEARCH?x=1"), init);
+        return base.text(url, init);
+      },
+      bytes: base.bytes,
+    };
+    const snap = await createEngine(t, { clock: () => NOW }).getSnapshot("24h");
+    const g = snap.sources.find((s) => s.id === "gdacs")!;
+    expect(g.status).toBe("ok");
+    expect(g.statusNote).toMatch(/via EVENTS4APP \(after SEARCH: HTTP 400/);
+  });
+
+  it("names crime portals that answer with nothing", async () => {
+    const base = fixtureTransport(NOW);
+    const t: Transport = {
+      async text(url, init) {
+        if (url.includes("cityofchicago")) return "[]";
+        return base.text(url, init);
+      },
+      bytes: base.bytes,
+    };
+    const snap = await createEngine(t, { clock: () => NOW }).getSnapshot("24h");
+    const c = snap.sources.find((s) => s.id === "crime")!;
+    expect(c.integrity).toMatchObject({ passed: 1, total: 2 });
+    expect(c.statusNote).toMatch(/Chicago: 0 rows/);
+    expect(c.status).toBe("degraded");
+  });
+
   it("marks a source offline when its upstream fails and nothing is cached", async () => {
     const base = fixtureTransport(NOW);
     const broken: Transport = {

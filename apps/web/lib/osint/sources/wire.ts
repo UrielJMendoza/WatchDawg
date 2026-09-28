@@ -186,13 +186,17 @@ export const wire: SourceAdapter = {
       feeds.map(async (f) => ({ f, items: parseFeedXml(await ctx.transport.text(f.url)) })),
     );
     const signals: Signal[] = [];
+    const failed: string[] = [];
     let ok = 0;
-    for (const r of results) {
-      if (r.status !== "fulfilled") continue;
+    results.forEach((r, i) => {
+      if (r.status !== "fulfilled") {
+        failed.push(`${feeds[i].outlet} (${r.reason instanceof Error ? r.reason.message : "error"})`);
+        return;
+      }
       ok++;
       signals.push(...itemsToSignals(r.value.items, r.value.f.outlet, ctx.gazetteer, ctx.now, ledger, seen));
-    }
-    if (!ok) throw new Error("All news wire feeds unreachable");
+    });
+    if (!ok) throw new Error(`All news wire feeds unreachable: ${failed.join("; ")}`);
     return {
       signals,
       ledger,
@@ -200,7 +204,7 @@ export const wire: SourceAdapter = {
         check: "feeds",
         passed: ok,
         total: feeds.length,
-        detail: `${ok} of ${feeds.length} newsroom feeds parsed`,
+        detail: `${ok} of ${feeds.length} newsroom feeds parsed${failed.length ? ` · failed: ${failed.join(", ")}` : ""}`,
       },
     };
   },

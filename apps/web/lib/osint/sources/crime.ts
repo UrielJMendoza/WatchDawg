@@ -35,7 +35,9 @@ interface Row {
 }
 
 const LIMIT = 4000;
-const LOOKBACK_MS = 8 * 86_400_000;
+// Portals publish with a lag of up to ~8 days; look back far enough to always
+// have the most recent published week.
+const LOOKBACK_MS = 16 * 86_400_000;
 
 /** Offence → severity. Anything unmatched is filtered as a minor offence. */
 const SEVERITY: Array<[RegExp, number, string]> = [
@@ -227,7 +229,7 @@ export const crime: SourceAdapter = {
     description: "Serious crime reports from San Francisco and Chicago police open-data portals, block-level. Sex offences and domestic incidents excluded.",
     ttlMs: 15 * 60_000,
     maxStaleMs: 24 * 3_600_000,
-    coverage: "Past 8 days · portals publish with a 1–8 day lag",
+    coverage: "Past 16 days · portals publish with a 1–8 day lag",
   },
   async collect(ctx) {
     const ledger = new Ledger();
@@ -236,16 +238,18 @@ export const crime: SourceAdapter = {
       CITIES.map(async (city) => {
         const since = socrataLocal(ctx.now - LOOKBACK_MS, city.tz);
         const text = await ctx.transport.text(city.url(since), token ? { headers: { "X-App-Token": token } } : undefined);
-        return parseCity(city, JSON.parse(text), ctx, ledger);
+        const json = JSON.parse(text) as unknown;
+        return { rows: Array.isArray(json) ? json.length : 0, signals: parseCity(city, json, ctx, ledger) };
       }),
     );
-    const signals = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
-    const ok = results.filter((r) => r.status === "fulfilled").length;
-    if (!ok) throw new Error("No city crime portal reachable");
-    return {
-      signals,
-      ledger,
-      integrity: { check: "portals", passed: ok, total: CITIES.length, detail: `${ok} of ${CITIES.length} city portals responded` },
-    };
+    const signals = results.flatMap((r) => (r.status === "fulfilled" ? r.value.signals : []));
+    // A portal that answers with zero rows is as unusable as one that fails.
+    const ok = results.filter((r) => r.status === "fulfilled" && r.value.rows > 0).length;
+    const detail = CITIES.map((c, i) => {
+      const r = results[i];
+      return r.status === "fulfilled" ? `${c.name}: ${r.value.rows} rows, ${r.value.signals.length} kept` : `${c.name}: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`;
+    }).join(" · ");
+    if (!ok) throw new Error(detail);
+    return { signals, ledger, integrity: { check: "portals", passed: ok, total: CITIES.length, detail } };
   },
 };

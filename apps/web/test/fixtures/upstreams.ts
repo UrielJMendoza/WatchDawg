@@ -3,7 +3,7 @@ import { strToU8, zipSync } from "fflate";
 import type { Transport } from "@/lib/osint/sources/types";
 import { USGS_URL } from "@/lib/osint/sources/usgs";
 import { EONET_URL } from "@/lib/osint/sources/eonet";
-import { GDACS_URL } from "@/lib/osint/sources/gdacs";
+import { GDACS_API } from "@/lib/osint/sources/gdacs";
 import { GDELT_LASTUPDATE_PATH } from "@/lib/osint/sources/gdelt";
 import { WIRE_FEEDS } from "@/lib/osint/sources/wire";
 import { CITIES } from "@/lib/osint/sources/crime";
@@ -534,7 +534,7 @@ export function fixtureTransport(now: number): Transport {
   const text = async (url: string): Promise<string> => {
     if (url === USGS_URL) return usgsPayload(now);
     if (url === EONET_URL) return eonetPayload(now);
-    if (url === GDACS_URL) return gdacsPayload(now);
+    if (url.startsWith(`${GDACS_API}/SEARCH`)) return gdacsPayload(now);
     if (url.endsWith(GDELT_LASTUPDATE_PATH)) return gdeltManifest(now);
     if (WIRE_FEEDS.some((f) => f.url === url)) return wireFeed(url, now);
     if (CITIES.some((c) => url.startsWith(c.url("").split("?")[0]))) return crimePayload(url, now);
