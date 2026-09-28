@@ -1,6 +1,6 @@
 import { XMLParser } from "fast-xml-parser";
 import type { Signal } from "../types";
-import { classifyText, TEXT_SEVERITY } from "../taxonomy";
+import { MIN_TEXT_SCORE, classifyText, TEXT_SEVERITY } from "../taxonomy";
 import { geocodeText, type GazetteerData } from "../gazetteer";
 import { checkTime, clamp01, cleanText, hashId, hostOf, Ledger, safeUrl } from "../validate";
 import type { CollectContext, CollectResult, SourceAdapter } from "./types";
@@ -125,8 +125,12 @@ export function itemsToSignals(
       continue;
     }
     const summary = cleanText(it.description, 400);
-    const cls = classifyText(title) ?? classifyText(`${title} ${summary}`);
-    if (!cls) {
+    // The title should carry the event. Falling back to the summary needs
+    // stronger evidence: summaries mention "the war" in stories about heat pumps.
+    const byTitle = classifyText(title);
+    const fromTitle = !!byTitle && byTitle.score >= MIN_TEXT_SCORE;
+    const cls = fromTitle ? byTitle : classifyText(`${title} ${summary}`);
+    if (!cls || cls.score < (fromTitle ? MIN_TEXT_SCORE : MIN_TEXT_SCORE + 1)) {
       ledger.filter("relevance.unclassified");
       continue;
     }

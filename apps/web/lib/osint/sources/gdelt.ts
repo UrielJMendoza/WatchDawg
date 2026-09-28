@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { unzipSync } from "fflate";
 import type { Category, GeoPrecision, Signal } from "../types";
-import { CAMEO_ROOTS_KEPT, VIOLENCE_VOCAB, cameo, classifyText, domainOf } from "../taxonomy";
+import { CAMEO_ROOTS_KEPT, LEGAL_VOCAB, VIOLENCE_VOCAB, cameo, classifyText, domainOf } from "../taxonomy";
 import { countryByIso3, stripDiacritics, type GazetteerData } from "../gazetteer";
 import {
   checkCoords,
@@ -33,7 +33,9 @@ import type { CollectContext, CollectResult, RelationObs, SourceAdapter, Transpo
 const HOSTS = ["http://data.gdeltproject.org", "https://data.gdeltproject.org"];
 export const GDELT_LASTUPDATE_PATH = "/gdeltv2/lastupdate.txt";
 const STEP_MS = 15 * 60_000;
-const MAX_FILES_PER_PULL = 8;
+// 24 exports = 6 hours; a fresh server has a full day after four pulls (~5 min),
+// and with stale-while-revalidate only the first pull is ever awaited.
+const MAX_FILES_PER_PULL = 24;
 const MAX_GROUPS = 1600;
 const COLUMNS = 61;
 
@@ -316,13 +318,13 @@ export function groupsToSignals(
       }
       // Violence claims need two independent outlets: single-outlet local
       // stories are GDELT's biggest source of false alarms.
-      if (g.outlets.size < 2) {
+      // Without a headline to check the coding against, ask for three.
+      if (g.outlets.size < (headline ? 2 : 3)) {
         ledger.filter(headline ? "evidence.single_outlet" : "evidence.unverifiable");
         continue;
       }
       // Courts, robberies and murders are crime, not war.
-      const cls = headline ? classifyText(headline) : null;
-      if (cls?.category === "crime") {
+      if (headline && (LEGAL_VOCAB.test(headline) || classifyText(headline)?.category === "crime")) {
         category = "crime";
         label = "Crime report";
       }
