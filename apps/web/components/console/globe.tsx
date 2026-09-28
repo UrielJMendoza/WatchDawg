@@ -34,12 +34,14 @@ export interface ViewInfo {
   pitch: number;
 }
 
-export type HoverTarget = { kind: "incident" | "air" | "sat"; id: string; x: number; y: number };
+export type HoverTarget = { kind: "incident" | "air" | "sat" | "rel"; id: string; x: number; y: number };
 
 interface GlobeProps {
   incidents: Incident[];
   aircraft: AirTrack[];
   satellites: SatElement[];
+  /** Pre-built great-circle arcs for country relations. */
+  relationLines: GeoJSON.FeatureCollection;
   hotspots: Hotspot[];
   selection: Selection | null;
   layers: LayerState;
@@ -215,6 +217,13 @@ function planeImage(color: string, size = 48): { width: number; height: number; 
   return { width: size, height: size, data: ctx.getImageData(0, 0, size, size).data };
 }
 
+/** Hostile links take the conflict colour, cooperative the civil colour. */
+const REL_RGB = {
+  hostile: DOMAINS.security.rgb.join(","),
+  mixed: "170,182,196",
+  cooperative: DOMAINS.civil.rgb.join(","),
+} as const;
+
 /** Neutral ink for tracks so they never read as an incident domain. */
 const TRACK_INK = "#dfe9f5";
 const TRACK_ALERT = "#d03b3b";
@@ -237,6 +246,7 @@ function dataSources(): Record<string, SourceSpecification> {
     },
     "incidents-raw": { type: "geojson", data: empty },
     hotspots: { type: "geojson", data: empty },
+    relations: { type: "geojson", data: empty, lineMetrics: true },
     aircraft: { type: "geojson", data: empty },
     satellites: { type: "geojson", data: empty },
     "sat-track": { type: "geojson", data: empty },
@@ -277,6 +287,37 @@ function dataLayers(font: string[] | null): LayerSpecification[] {
         ],
         "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 0, 0.8, 6, 0.4, 9, 0],
       },
+    },
+    ...(["hostile", "mixed", "cooperative"] as const).map(
+      (stance, i): LayerSpecification => ({
+        id: `rel-${stance}`,
+        type: "line",
+        source: "relations",
+        filter: ["==", ["get", "s"], i],
+        layout: { "line-cap": "round" },
+        paint: {
+          "line-width": ["interpolate", ["linear"], ["get", "w"], 0, 0.8, 1, 3.2],
+          "line-opacity": ["interpolate", ["linear"], ["zoom"], 1, 0.85, 6, 0.5],
+          // Transparent at the actor, bright at the target: direction without arrows.
+          "line-gradient": [
+            "interpolate",
+            ["linear"],
+            ["line-progress"],
+            0,
+            `rgba(${REL_RGB[stance]},0)`,
+            0.55,
+            `rgba(${REL_RGB[stance]},0.45)`,
+            1,
+            `rgba(${REL_RGB[stance]},0.95)`,
+          ],
+        },
+      }),
+    ),
+    {
+      id: "rel-hit",
+      type: "line",
+      source: "relations",
+      paint: { "line-width": 12, "line-opacity": 0 },
     },
     {
       id: "cluster-glow",
@@ -472,6 +513,7 @@ const TOGGLED: Record<keyof Omit<LayerState, "rotate">, string[]> = {
   hotspots: ["hotspot-fill", "hotspot-line"],
   pulses: ["inc-pulse"],
   air: ["air-icon", "air-selected", "air-label"],
+  links: ["rel-hostile", "rel-mixed", "rel-cooperative", "rel-hit"],
   sats: ["sat-dot", "sat-glow", "sat-track"],
 };
 
@@ -486,6 +528,9 @@ export default function Globe(props: GlobeProps) {
   const lastInteraction = useRef(0);
   const hoverCountry = useRef<string | number | null>(null);
   const pendingCamera = useRef<CameraCommand | null>(null);
+  /** Detailed (50m) country polygons, fetched the first time the view zooms in. */
+  const hdCountries = useRef<GeoJSON.FeatureCollection | null>(null);
+  const hdLoading = useRef(false);
   const loadedRef = useRef(false);
 
   const applyCamera = useCallback((map: MLMap, c: CameraCommand) => {
@@ -504,6 +549,7 @@ export default function Globe(props: GlobeProps) {
     (map.getSource("incidents-raw") as GeoJSONSource | undefined)?.setData(fc);
     (map.getSource("hotspots") as GeoJSONSource | undefined)?.setData(hotspotFeatures(p.hotspots));
     (map.getSource("aircraft") as GeoJSONSource | undefined)?.setData(aircraftFeatures(p.aircraft));
+    (map.getSource("relations") as GeoJSONSource | undefined)?.setData(p.relationLines);
   }, []);
 
   /** Re-propagate every satellite to "now" and redraw. */
@@ -589,6 +635,27 @@ export default function Globe(props: GlobeProps) {
     requestAnimationFrame(declutter);
   }, [syncLayers, declutter]);
 
+  const ensureDetail = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !readyRef.current) return;
+    const apply = () => {
+      hoverCountry.current = null;
+      (map.getSource("countries") as GeoJSONSource | undefined)?.setData(hdCountries.current!);
+    };
+    if (hdCountries.current) return apply();
+    if (hdLoading.current || map.getZoom() < 3) return;
+    hdLoading.current = true;
+    fetch("/geo/countries-50m.geojson")
+      .then((r) => (r.ok ? (r.json() as Promise<GeoJSON.FeatureCollection>) : Promise.reject(new Error(String(r.status)))))
+      .then((fc) => {
+        hdCountries.current = fc;
+        if (mapRef.current === map) apply();
+      })
+      .catch(() => {
+        hdLoading.current = false;
+      });
+  }, []);
+
   const installImages = (map: MLMap) => {
     if (!map.hasImage("plane")) map.addImage("plane", planeImage(TRACK_INK), { pixelRatio: 2 });
     if (!map.hasImage("plane-alert")) map.addImage("plane-alert", planeImage(TRACK_ALERT), { pixelRatio: 2 });
@@ -630,6 +697,8 @@ export default function Globe(props: GlobeProps) {
         readyRef.current = true;
         syncData();
         syncSats();
+        // A style swap resets sources; restore detailed borders if we had them.
+        if (hdCountries.current) ensureDetail();
         syncSelection();
         syncLayers();
         syncMarkers();
@@ -653,7 +722,7 @@ export default function Globe(props: GlobeProps) {
       });
       m.on("click", (e: MapLayerMouseEvent) => {
         const hit = m.queryRenderedFeatures(e.point, {
-          layers: ["air-icon", "sat-dot", "inc-dot", "cluster-ring"].filter((l) => m.getLayer(l)),
+          layers: ["air-icon", "sat-dot", "inc-dot", "cluster-ring", "rel-hit"].filter((l) => m.getLayer(l)),
         });
         const track = hit.find((f) => f.layer.id === "air-icon" || f.layer.id === "sat-dot");
         if (track) {
@@ -661,6 +730,11 @@ export default function Globe(props: GlobeProps) {
           return;
         }
         if (hit.some((f) => f.layer.id === "cluster-ring")) return;
+        const link = hit.find((f) => f.layer.id === "rel-hit");
+        if (link && !hit.some((f) => f.layer.id === "inc-dot")) {
+          propsRef.current.onSelect({ kind: "rel", id: String(link.properties.id) });
+          return;
+        }
         const inc = hit.find((f) => f.layer.id === "inc-dot");
         if (inc) {
           propsRef.current.onSelect({ kind: "incident", id: String(inc.properties.id) });
@@ -677,11 +751,15 @@ export default function Globe(props: GlobeProps) {
         cancelAnimationFrame(raf);
         raf = requestAnimationFrame(() => {
           propsRef.current.onCursor({ lat: e.lngLat.lat, lon: e.lngLat.lng });
-          const layers = ["air-icon", "sat-dot", "inc-dot", "cluster-ring"].filter((l) => m.getLayer(l));
+          const layers = ["air-icon", "sat-dot", "inc-dot", "cluster-ring", "rel-hit"].filter((l) => m.getLayer(l));
           const hit = m.queryRenderedFeatures(e.point, { layers });
-          const top = hit.find((f) => f.layer.id !== "cluster-ring");
+          const order = ["air-icon", "sat-dot", "inc-dot", "rel-hit"];
+          const top = hit
+            .filter((f) => f.layer.id !== "cluster-ring")
+            .sort((a, b) => order.indexOf(a.layer.id) - order.indexOf(b.layer.id))[0];
           m.getCanvas().style.cursor = hit.length ? "pointer" : "";
-          const kind = top?.layer.id === "air-icon" ? "air" : top?.layer.id === "sat-dot" ? "sat" : "incident";
+          const kind =
+            top?.layer.id === "air-icon" ? "air" : top?.layer.id === "sat-dot" ? "sat" : top?.layer.id === "rel-hit" ? "rel" : "incident";
           propsRef.current.onHover(top ? { kind, id: String(top.properties.id), x: e.point.x, y: e.point.y } : null);
           const c = hit.length ? undefined : m.queryRenderedFeatures(e.point, { layers: ["countries-fill"] })[0];
           const cid = c?.id ?? null;
@@ -732,6 +810,7 @@ export default function Globe(props: GlobeProps) {
         m.easeTo({ center: c, duration: 1000, easing: (n) => n, essential: false });
       };
       m.on("moveend", spin);
+      m.on("zoomend", ensureDetail);
       const kick = window.setInterval(spin, 1500);
       m.once("remove", () => window.clearInterval(kick));
     });
@@ -746,7 +825,7 @@ export default function Globe(props: GlobeProps) {
       mapRef.current = null;
     };
     // The map is created once; basemap changes are handled below.
-  }, [syncData, syncSats, syncSelection, syncLayers, syncMarkers, declutter, applyCamera]);
+  }, [syncData, syncSats, syncSelection, syncLayers, syncMarkers, declutter, applyCamera, ensureDetail]);
 
   // Basemap swap: rebuild the style, data is re-pushed on style.load.
   const firstBasemap = useRef(props.basemap);
@@ -760,7 +839,7 @@ export default function Globe(props: GlobeProps) {
     });
   }, [props.basemap]);
 
-  useEffect(() => syncData(), [syncData, props.incidents, props.hotspots, props.aircraft, props.freshIds, props.now]);
+  useEffect(() => syncData(), [syncData, props.incidents, props.hotspots, props.aircraft, props.relationLines, props.freshIds, props.now]);
 
   // Satellites move ~7 km/s: re-propagate every 2 s while the layer is on.
   useEffect(() => {

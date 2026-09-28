@@ -276,3 +276,8 @@ main article a {
   text-underline-offset: 2px;
   text-decoration-color: hsl(var(--muted) / 0.6);
 }
+
+/* Floating menus sit over busy panels: keep them near-opaque. */
+.panel-solid {
+  background: hsl(var(--surface) / 0.98);
+}

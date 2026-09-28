@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { unzipSync } from "fflate";
 import type { Category, GeoPrecision, Signal } from "../types";
 import { CAMEO_ROOTS_KEPT, cameo } from "../taxonomy";
-import { stripDiacritics, type GazetteerData } from "../gazetteer";
+import { countryByIso3, stripDiacritics, type GazetteerData } from "../gazetteer";
 import {
   checkCoords,
   checkTime,
@@ -13,7 +13,7 @@ import {
   safeUrl,
   titleCase,
 } from "../validate";
-import type { CollectContext, CollectResult, SourceAdapter, Transport } from "./types";
+import type { CollectContext, CollectResult, RelationObs, SourceAdapter, Transport } from "./types";
 
 /**
  * GDELT 2.0 Event Database — machine-coded events from worldwide news,
@@ -49,6 +49,9 @@ interface Row {
   tone: number;
   actor1: string;
   actor2: string;
+  /** CAMEO actor country codes (ISO alpha-3 for states). */
+  actor1Country: string;
+  actor2Country: string;
   geoType: number;
   geoName: string;
   lat: number;
@@ -183,6 +186,8 @@ export function parseExport(tsv: string, now: number, horizonMs: number): { rows
       tone: Number(c[34]) || 0,
       actor1: c[6],
       actor2: c[16],
+      actor1Country: c[7],
+      actor2Country: c[17],
       geoType,
       geoName: c[52],
       lat,
@@ -406,6 +411,7 @@ export const gdelt: SourceAdapter = {
     const signals = groupsToSignals(rows, ctx.gazetteer, ledger);
     return {
       signals,
+      relations: relationObservations(rows, ctx.gazetteer),
       ledger,
       integrity: {
         check: "md5",
@@ -416,6 +422,31 @@ export const gdelt: SourceAdapter = {
     };
   },
 };
+
+/**
+ * Actor-country pairs: rows where both actors are identified with different
+ * states. Regional pseudo-codes (AFR, EUR, …) don't resolve and are dropped.
+ */
+export function relationObservations(rows: Row[], gaz: GazetteerData): RelationObs[] {
+  const out: RelationObs[] = [];
+  for (const r of rows) {
+    if (!r.actor1Country || !r.actor2Country || r.actor1Country === r.actor2Country) continue;
+    const a = countryByIso3(gaz, r.actor1Country);
+    const b = countryByIso3(gaz, r.actor2Country);
+    if (!a || !b || a.iso2 === b.iso2) continue;
+    out.push({
+      from: a.iso2,
+      to: b.iso2,
+      time: r.time,
+      articles: r.articles,
+      outlet: r.outlet,
+      goldstein: r.goldstein,
+      tone: r.tone,
+      category: r.category,
+    });
+  }
+  return out;
+}
 
 /** Test hook. */
 export function _resetGdeltCache(): void {

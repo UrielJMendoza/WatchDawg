@@ -16,6 +16,8 @@ interface Props {
   generatedAt: number | null;
   now: number;
   loading: boolean;
+  /** Rendered before the live-status block (alerts tray). */
+  actions?: React.ReactNode;
 }
 
 export function Logo({ className }: { className?: string }) {
@@ -73,6 +75,8 @@ export function TopBar(p: Props) {
         onChange={p.onWindow}
         options={(["1h", "6h", "24h", "7d", "30d"] as WindowKey[]).map((w) => ({ value: w, label: w }))}
       />
+
+      {p.actions}
 
       <div className="hidden items-center gap-3 md:flex">
         <div className="flex flex-col items-end leading-tight" title={p.sources.map((s) => `${s.name}: ${s.status}`).join("\n")}>

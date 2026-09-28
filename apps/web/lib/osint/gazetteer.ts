@@ -245,6 +245,19 @@ export function geocodeText(data: GazetteerData, text: string): GeoMatch | null 
   return null;
 }
 
+const iso3Index = new WeakMap<GazetteerData, Map<string, CountryRow>>();
+
+/** ISO 3166-1 alpha-3 lookup (CAMEO actor country codes are alpha-3). */
+export function countryByIso3(data: GazetteerData, iso3: string | undefined | null): CountryRow | undefined {
+  if (!iso3) return undefined;
+  let idx = iso3Index.get(data);
+  if (!idx) {
+    idx = new Map(data.countries.map((c) => [c.iso3, c]));
+    iso3Index.set(data, idx);
+  }
+  return idx.get(iso3.toUpperCase());
+}
+
 const nameIndex = new WeakMap<GazetteerData, Map<string, CountryRow>>();
 
 /** Exact (case- and accent-insensitive) country lookup by name or alias. */

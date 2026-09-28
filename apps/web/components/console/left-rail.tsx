@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { ArrowDownRight, ArrowUpRight, ExternalLink, Minus, RotateCcw, X } from "lucide-react";
-import type { Category, Domain, Hotspot, Incident, SourceHealth, SourceId } from "@/lib/osint/types";
+import type { Category, Domain, Hotspot, Incident, Relation, SourceHealth, SourceId } from "@/lib/osint/types";
 import type { FeedHealth } from "@/lib/osint/tracks/types";
 import { CATEGORIES, CATEGORY_ORDER, DOMAINS, DOMAIN_ORDER, domainOf } from "@/lib/osint/taxonomy";
 import type { FilterState, LayerState, Selection } from "@/lib/console/state";
@@ -20,6 +20,7 @@ interface Props {
   all: Incident[];
   visible: Incident[];
   hotspots: Hotspot[];
+  relations: Relation[];
   sources: SourceHealth[];
   /** Health of the tracks feeds (aircraft, satellites). */
   feeds: FeedHealth[];
@@ -206,6 +207,7 @@ function FiltersTab({ all, visible, filters: f, onFilters, layers, onLayers, bas
         <SectionTitle>Live tracks</SectionTitle>
         <Toggle checked={layers.air} onChange={(v) => onLayers({ ...layers, air: v })} label="Military & emergency aircraft (ADS-B)" />
         <Toggle checked={layers.sats} onChange={(v) => onLayers({ ...layers, sats: v })} label="Satellites (SGP4, live)" />
+        <Toggle checked={layers.links} onChange={(v) => onLayers({ ...layers, links: v })} label="Country links (who acts on whom)" />
       </section>
     </div>
   );
@@ -233,7 +235,67 @@ function RangeRow({ label, value, onChange }: { label: string; value: number; on
 
 // ─── Hotspots ─────────────────────────────────────────────────────────────
 
-function HotspotsTab({ hotspots, selection, onSelect }: Props) {
+function HotspotsTab(p: Props) {
+  return (
+    <div className="space-y-5">
+      <HotspotList {...p} />
+      <LinkList {...p} />
+    </div>
+  );
+}
+
+const STANCE_LABEL: Record<Relation["stance"], string> = { hostile: "Hostile", mixed: "Mixed", cooperative: "Cooperative" };
+
+function LinkList({ relations, selection, onSelect, countryName }: Props) {
+  if (!relations.length) return null;
+  const max = Math.max(...relations.map((r) => r.articles));
+  return (
+    <section className="space-y-1">
+      <SectionTitle>Strongest country links</SectionTitle>
+      <p className="pb-1 text-[11px] leading-relaxed text-muted-foreground">
+        Actors from one country acting on another, from machine-coded news. Hostile links carry the conflict colour.
+      </p>
+      <ul className="space-y-0.5">
+        {relations.slice(0, 15).map((r) => {
+          const active = selection?.kind === "rel" && selection.id === r.id;
+          return (
+            <li key={r.id}>
+              <button
+                type="button"
+                onClick={() => onSelect({ kind: "rel", id: r.id })}
+                className={cn(
+                  "w-full rounded-sm border px-2 py-1.5 text-left transition-colors",
+                  active ? "border-primary/50 bg-primary/5" : "border-transparent hover:border-border hover:bg-surface-2/50",
+                )}
+              >
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="min-w-0 flex-1 truncate">
+                    {countryName(r.from) ?? r.from} <span className="text-muted-foreground">→</span> {countryName(r.to) ?? r.to}
+                  </span>
+                  <span className="font-mono text-[10px] text-muted-foreground">{STANCE_LABEL[r.stance]}</span>
+                </div>
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="h-1 flex-1 overflow-hidden rounded-full bg-surface-2">
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: `${(r.articles / max) * 100}%`,
+                        background: r.stance === "hostile" ? DOMAINS.security.color : r.stance === "cooperative" ? DOMAINS.civil.color : "hsl(var(--muted))",
+                      }}
+                    />
+                  </div>
+                  <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{r.articles}</span>
+                </div>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function HotspotList({ hotspots, selection, onSelect }: Props) {
   if (!hotspots.length) return <Empty>No hotspots in this window yet.</Empty>;
   const maxScore = Math.max(...hotspots.map((h) => h.score));
   return (

@@ -58,6 +58,18 @@ describe("pipeline on fixture upstreams", () => {
     expect(new Set(snap.incidents.map((i) => i.id)).size).toBe(snap.incidents.length);
   });
 
+  it("builds a directed, evidence-gated country interaction graph", async () => {
+    const snap = await createEngine(fixtureTransport(NOW), { clock: () => NOW }).getSnapshot("24h");
+    const ruUa = snap.relations.find((r) => r.id === "RU>UA");
+    expect(ruUa).toBeDefined();
+    expect(ruUa!.stance).toBe("hostile");
+    expect(ruUa!.outlets).toBeGreaterThanOrEqual(2);
+    // Same-country actor pairs (e.g. Sudanese forces vs Sudanese civilians) are not links.
+    expect(snap.relations.every((r) => r.from !== r.to)).toBe(true);
+    // Sorted by coverage.
+    for (let i = 1; i < snap.relations.length; i++) expect(snap.relations[i - 1].articles).toBeGreaterThanOrEqual(snap.relations[i].articles);
+  });
+
   it("windows are views: shorter windows hold fewer incidents", async () => {
     const engine = createEngine(fixtureTransport(NOW), { clock: () => NOW });
     const [h1, d1, d7] = await Promise.all([engine.getSnapshot("1h"), engine.getSnapshot("24h"), engine.getSnapshot("7d")]);

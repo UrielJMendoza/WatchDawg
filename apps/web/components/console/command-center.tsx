@@ -7,6 +7,9 @@ import { PanelLeft, PanelRight, Plane, Satellite, X } from "lucide-react";
 import type { Incident, Snapshot, WindowKey } from "@/lib/osint/types";
 import type { AirPayload, SpacePayload } from "@/lib/osint/tracks/types";
 import { satState } from "@/lib/console/orbits";
+import { countryAnchor, relationFeatures } from "@/lib/console/links";
+import { useWatchlist } from "@/lib/console/watchlist";
+import { AlertsButton } from "./alerts";
 import { DOMAINS, DOMAIN_ORDER, CATEGORIES } from "@/lib/osint/taxonomy";
 import { countryByIso2, type GazetteerData } from "@/lib/osint/gazetteer";
 import { hasFilters, matchesFilters, parseQuery } from "@/lib/osint/query";
@@ -130,6 +133,18 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
   });
   const aircraft = useMemo(() => (layers.air ? airData?.aircraft ?? [] : []), [layers.air, airData]);
   const satellites = useMemo(() => (layers.sats ? spaceData?.satellites ?? [] : []), [layers.sats, spaceData]);
+  const relations = useMemo(() => snap?.relations ?? [], [snap]);
+  const relationLines = useMemo<GeoJSON.FeatureCollection>(
+    () =>
+      gaz && layers.links
+        ? relationFeatures(
+            // Links touching the filtered country only, when one is set.
+            filters.country ? relations.filter((r) => r.from === filters.country || r.to === filters.country) : relations,
+            gaz,
+          )
+        : { type: "FeatureCollection", features: [] },
+    [gaz, layers.links, relations, filters.country],
+  );
   const feeds = useMemo(() => [airData?.health, spaceData?.health].filter((h): h is NonNullable<typeof h> => !!h), [airData, spaceData]);
   const all = useMemo(() => snap?.incidents ?? [], [snap]);
   const byId = useMemo(() => new Map(all.map((i) => [i.id, i])), [all]);
@@ -150,6 +165,9 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
     for (const [id, at] of freshAt.current) if (t - at > FRESH_MS || !ids.has(id)) freshAt.current.delete(id);
     setFreshIds(new Set(freshAt.current.keys()));
   }, [snap]);
+
+  // ─── Watchlist (scans the full, unfiltered incident set) ──────────────────
+  const watch = useWatchlist(all, (iso2) => countryName(iso2));
 
   // ─── Search + filters ───────────────────────────────────────────────────
   const index = useMemo(() => (all.length ? buildIncidentIndex(all, countryName) : null), [all, countryName]);
@@ -185,13 +203,18 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
       } else if (s?.kind === "air") {
         const a = aircraft.find((x) => x.id === s.id);
         if (a) setCamera({ key: Date.now(), lat: a.lat, lon: a.lon, zoom: 6 });
+      } else if (s?.kind === "rel" && gaz) {
+        const [from, to] = s.id.split(">");
+        const a = countryAnchor(gaz, from);
+        const b = countryAnchor(gaz, to);
+        if (a && b) setCamera({ key: Date.now(), lon: (a[0] + b[0]) / 2, lat: (a[1] + b[1]) / 2, zoom: 3 });
       } else if (s?.kind === "sat") {
         const sat = satellites.find((x) => x.id === s.id);
         const st = sat ? satState(sat, new Date()) : null;
         if (st) setCamera({ key: Date.now(), lat: st.lat, lon: st.lon, zoom: 2.4 });
       }
     },
-    [byId, snap, countryRow, aircraft, satellites],
+    [byId, snap, countryRow, aircraft, satellites, gaz],
   );
 
   // Deep link: fly to the URL's selection once its target is resolvable.
@@ -203,11 +226,12 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
       (selection.kind === "hotspot" && !!snap?.hotspots.some((h) => h.id === selection.id)) ||
       (selection.kind === "country" && !!gaz) ||
       (selection.kind === "air" && aircraft.some((a) => a.id === selection.id)) ||
-      (selection.kind === "sat" && satellites.some((x) => x.id === selection.id));
+      (selection.kind === "sat" && satellites.some((x) => x.id === selection.id)) ||
+      (selection.kind === "rel" && !!gaz && relations.some((x) => x.id === selection.id));
     if (!ready) return;
     deepLinked.current = true;
     select(selection);
-  }, [hydrated, selection, byId, snap, gaz, aircraft, satellites, select]);
+  }, [hydrated, selection, byId, snap, gaz, aircraft, satellites, relations, select]);
 
   const onCommand = (c: PaletteCommand) => {
     if (c.type === "window") setWindow(c.window);
@@ -240,6 +264,7 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
   const hovered = hover?.kind === "incident" ? byId.get(hover.id) : undefined;
   const hoveredAir = hover?.kind === "air" ? aircraft.find((a) => a.id === hover.id) : undefined;
   const hoveredSat = hover?.kind === "sat" ? satellites.find((x) => x.id === hover.id) : undefined;
+  const hoveredRel = hover?.kind === "rel" ? relations.find((x) => x.id === hover.id) : undefined;
   const emergencies = aircraft.filter((a) => a.emergency !== "none").length;
   const sources = snap?.sources ?? [];
   const uplinkDown = !!snap && sources.every((s) => s.status === "offline" || s.status === "disabled");
@@ -260,6 +285,9 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
         generatedAt={snap?.generatedAt ?? null}
         now={now}
         loading={isValidating}
+        actions={
+          <AlertsButton watch={watch} countryName={countryName} now={now} onOpenIncident={(id) => select({ kind: "incident", id })} />
+        }
       />
 
       <div className="relative min-h-0 flex-1">
@@ -269,6 +297,7 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
             incidents={visible}
             aircraft={aircraft}
             satellites={satellites}
+            relationLines={relationLines}
             hotspots={visibleHotspots}
             selection={selection}
             layers={layers}
@@ -349,6 +378,21 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
           </div>
         )}
 
+        {hover && hoveredRel && (
+          <div className="panel pointer-events-none absolute z-30 max-w-[280px] rounded-sm px-2.5 py-2" style={{ left: hover.x + 16, top: hover.y + 16 }}>
+            <div className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+              Link · {hoveredRel.stance} · Goldstein {hoveredRel.goldstein > 0 ? "+" : ""}
+              {hoveredRel.goldstein.toFixed(1)}
+            </div>
+            <div className="mt-1 text-xs font-medium">
+              {countryName(hoveredRel.from) ?? hoveredRel.from} → {countryName(hoveredRel.to) ?? hoveredRel.to}
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              {hoveredRel.events} events · {hoveredRel.articles} articles · {hoveredRel.outlets} outlets
+            </div>
+          </div>
+        )}
+
         {hover && (hoveredAir || hoveredSat) && (
           <div className="panel pointer-events-none absolute z-30 max-w-[260px] rounded-sm px-2.5 py-2" style={{ left: hover.x + 16, top: hover.y + 16 }}>
             {hoveredAir && (
@@ -393,6 +437,7 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
             all={all}
             visible={visible}
             hotspots={snap?.hotspots ?? []}
+            relations={relations}
             sources={sources}
             feeds={feeds}
             filters={filters}
@@ -421,6 +466,7 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
             selection={selection}
             aircraft={aircraft}
             satellites={satellites}
+            relations={relations}
             incidents={visible}
             byId={byId}
             hotspots={snap?.hotspots ?? []}
@@ -431,6 +477,8 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
             onSelect={select}
             onFlyTo={flyTo}
             onFilterCountry={(iso2) => setFilters((f) => ({ ...f, country: iso2 }))}
+            watching={watch.watching}
+            onToggleWatch={watch.toggle}
           />
         </aside>
 

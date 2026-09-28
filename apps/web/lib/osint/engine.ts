@@ -13,6 +13,7 @@ import { crime } from "./sources/crime";
 import { wire } from "./sources/wire";
 import { fuse, rankIncident } from "./fusion";
 import { buildHotspots, buildStats, buildTimeline } from "./aggregate";
+import { buildRelations } from "./relations";
 
 /**
  * Ingestion orchestrator. Each source is pulled on its own TTL, in parallel,
@@ -194,6 +195,9 @@ export function createEngine(
     const sources = adapters.map((a, i) => healthOf(a, states[i], now, a.disabled?.() ?? null));
 
     const signals: Signal[] = [];
+    const relationObs = states.flatMap((st, i) =>
+      sources[i].status === "offline" || sources[i].status === "disabled" ? [] : st.result?.relations ?? [],
+    );
     states.forEach((st, i) => {
       if (sources[i].status === "offline" || sources[i].status === "disabled") return;
       for (const s of st.result?.signals ?? []) {
@@ -222,6 +226,7 @@ export function createEngine(
       window,
       incidents,
       hotspots: buildHotspots(incidents, gazetteer, window, now, windowMs),
+      relations: buildRelations(relationObs, window, now, windowMs),
       sources,
       stats: buildStats(incidents, signals.length),
       timeline: buildTimeline(signals, window, now),

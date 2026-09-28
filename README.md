@@ -8,7 +8,7 @@
 
 ## What it does
 
-- **3D globe** (MapLibre GL v5 globe projection) with atmosphere, clustered incidents, activity heat, pulsing rings for the last 90 minutes, hotspot zones and labels. Dark vector basemap (CARTO) or satellite imagery (Esri), with a self-hosted Natural Earth fallback so the globe always renders.
+- **3D globe** (MapLibre GL v5 globe projection) with atmosphere, clustered incidents, activity heat, pulsing rings for the last 90 minutes, hotspot zones and labels. Dark vector basemap (CARTO) or satellite imagery (Esri), with a self-hosted Natural Earth fallback so the globe always renders (detailed 50m borders load when you zoom in).
 - **Live sources**
   | Source | What | Grade |
   |---|---|---|
@@ -20,6 +20,8 @@
   | 15 newsrooms (RSS) | BBC, Al Jazeera, NYT, Guardian, France 24, DW, UN News, NPR, Sky, CBC, Kyiv Independent, Times of Israel, Africanews, Middle East Eye — classified and geocoded | B |
   | GDELT 2.0 | Machine-coded conflict/unrest/diplomacy events from world news, every 15 minutes | C |
 - **Live tracks** — military-flagged aircraft and emergency squawks (7500/7600/7700) from ADS-B networks (adsb.lol, airplanes.live), refreshed every 15 s; satellites (stations, military, Earth observation, weather) from checksum-validated CelesTrak element sets, propagated live in the browser with SGP4 and drawn with ground tracks.
+- **Link analysis** — a directed country→country interaction graph from GDELT actor nationality (e.g. Russia → Ukraine), drawn as great-circle arcs coloured by stance (hostile / mixed / cooperative, from the Goldstein scale). A link needs 8+ articles from 2+ outlets across 2+ events in the window.
+- **Watchlist alerts** — watch any country; new incidents there with severity ≥ 60 land in the alert tray and, if allowed, as desktop notifications. Stored only in your browser.
 - **Validation** — integrity (GDELT MD5 vs manifest), strict schemas (zod), coordinate/time/URL range checks, relevance and evidence thresholds, privacy filters. Every dropped record is counted by reason in the **Sources** panel.
 - **Fusion** — observations of the same event close in space and time merge into one incident. Confidence is a noisy-OR over *independent* sources; each incident carries a NATO **Admiralty grade** (e.g. `A1`, `B2`, `C3`).
 - **Aggregation** — hotspots ranked by activity index (severity × confidence), with trend and sparkline.

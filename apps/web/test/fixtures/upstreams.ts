@@ -303,6 +303,26 @@ const SLUGS: Record<string, string[]> = {
   "20": ["reports of mass casualties emerge from {p}"],
 };
 
+/** Actor-country pairs (CAMEO alpha-3) per theatre, for link-analysis fixtures. */
+const PAIRS: Record<string, Array<[string, string]>> = {
+  Kharkiv: [["RUS", "UKR"], ["UKR", "RUS"]],
+  Donetsk: [["RUS", "UKR"]],
+  Zaporizhzhia: [["RUS", "UKR"]],
+  Kherson: [["RUS", "UKR"]],
+  Kyiv: [["RUS", "UKR"]],
+  Odesa: [["RUS", "UKR"]],
+  Belgorod: [["UKR", "RUS"]],
+  Gaza: [["ISR", "PSE"]],
+  "Khan Yunis": [["ISR", "PSE"]],
+  Beirut: [["ISR", "LBN"]],
+  Hodeidah: [["USA", "YEM"]],
+  Taipei: [["CHN", "TWN"]],
+  Tehran: [["IRN", "ISR"]],
+  Washington: [["USA", "CHN"]],
+  Beijing: [["CHN", "USA"]],
+  Geneva: [["USA", "RUS"]],
+};
+
 function slugFor(r: Rand, code: string, place: string): string {
   const opts = SLUGS[code.slice(0, 3)] ?? SLUGS[code.slice(0, 2)] ?? ["developing situation in {p}"];
   return slug(pick(r, opts).replace("{p}", place));
@@ -352,6 +372,11 @@ function gdeltTsv(fileMs: number): string {
       c[6] = a1;
       c[15] = a2.slice(0, 3);
       c[16] = a2;
+      const pair = PAIRS[place] ? pick(r, PAIRS[place]) : null;
+      if (pair) {
+        c[7] = pair[0];
+        c[17] = pair[1];
+      }
       c[25] = "1";
       c[26] = code;
       c[27] = code.slice(0, 3);

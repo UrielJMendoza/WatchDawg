@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertOctagon, Check, Crosshair, ExternalLink, Filter, Link2, Plane, Satellite, X } from "lucide-react";
-import type { Hotspot, Incident, SourceHealth } from "@/lib/osint/types";
+import { AlertOctagon, Check, Crosshair, ExternalLink, Filter, Link2, Plane, Satellite, Star, X } from "lucide-react";
+import type { Hotspot, Incident, Relation, SourceHealth } from "@/lib/osint/types";
 import type { AirTrack, SatElement } from "@/lib/osint/tracks/types";
 import { periodMinutes, satState } from "@/lib/console/orbits";
 import { CATEGORIES, DOMAINS, DOMAIN_ORDER, domainOf, severityLabel } from "@/lib/osint/taxonomy";
@@ -18,6 +18,7 @@ interface Props {
   selection: Selection | null;
   aircraft: AirTrack[];
   satellites: SatElement[];
+  relations: Relation[];
   incidents: Incident[];
   byId: Map<string, Incident>;
   hotspots: Hotspot[];
@@ -28,6 +29,8 @@ interface Props {
   onSelect: (s: Selection | null) => void;
   onFlyTo: (lat: number, lon: number, zoom?: number) => void;
   onFilterCountry: (iso2: string) => void;
+  watching: (iso2: string) => boolean;
+  onToggleWatch: (iso2: string) => void;
 }
 
 export function Inspector(p: Props) {
@@ -44,6 +47,10 @@ export function Inspector(p: Props) {
   if (sel?.kind === "air") {
     const a = p.aircraft.find((x) => x.id === sel.id);
     if (a) return <AirDossier a={a} {...p} />;
+  }
+  if (sel?.kind === "rel") {
+    const rel = p.relations.find((x) => x.id === sel.id);
+    if (rel) return <RelationDossier rel={rel} {...p} />;
   }
   if (sel?.kind === "sat") {
     const sat = p.satellites.find((x) => x.id === sel.id);
@@ -310,7 +317,7 @@ function HotspotDossier({ h, byId, now, onSelect, onFlyTo }: Props & { h: Hotspo
 
 // ─── Country ──────────────────────────────────────────────────────────────
 
-function CountryDossier({ iso2, incidents, now, onSelect, country, onFilterCountry, onFlyTo }: Props & { iso2: string }) {
+function CountryDossier({ iso2, incidents, now, onSelect, country, onFilterCountry, onFlyTo, watching, onToggleWatch }: Props & { iso2: string }) {
   const c = country(iso2);
   const items = useMemo(() => incidents.filter((i) => i.country === iso2).sort((a, b) => b.severity * b.confidence - a.severity * a.confidence), [incidents, iso2]);
   const byCat = useMemo(() => {
@@ -346,6 +353,14 @@ function CountryDossier({ iso2, incidents, now, onSelect, country, onFilterCount
         <IncidentList items={items.slice(0, 40)} now={now} onSelect={onSelect} />
       </div>
       <footer className="flex items-center gap-1.5 border-t border-border px-4 py-2">
+        <button
+          type="button"
+          onClick={() => onToggleWatch(iso2)}
+          aria-pressed={watching(iso2)}
+          className={cn("chip hover:text-foreground", watching(iso2) && "border-primary/50 text-primary")}
+        >
+          <Star className={cn("h-3 w-3", watching(iso2) && "fill-current")} /> {watching(iso2) ? "Watching" : "Watch"}
+        </button>
         <button type="button" onClick={() => onFilterCountry(iso2)} className="chip hover:text-foreground">
           <Filter className="h-3 w-3" /> Filter globe
         </button>
@@ -354,6 +369,73 @@ function CountryDossier({ iso2, incidents, now, onSelect, country, onFilterCount
             <Crosshair className="h-3 w-3" /> Fly to
           </button>
         )}
+        <CopyLink />
+      </footer>
+    </div>
+  );
+}
+
+// ─── Relationship ─────────────────────────────────────────────────────────
+
+const STANCE_TEXT: Record<Relation["stance"], string> = {
+  hostile: "Hostile — coercion, threats or force dominate the coverage",
+  mixed: "Mixed — neither cooperation nor conflict dominates",
+  cooperative: "Cooperative — talks, agreements or aid dominate the coverage",
+};
+
+function RelationDossier({ rel, relations, incidents, now, country, onSelect }: Props & { rel: Relation }) {
+  const from = country(rel.from);
+  const to = country(rel.to);
+  const reverse = relations.find((r) => r.from === rel.to && r.to === rel.from);
+  const related = incidents
+    .filter((i) => i.country === rel.to && (i.category === rel.category || domainOf(i.category) === domainOf(rel.category)))
+    .sort((a, b) => b.severity * b.confidence - a.severity * a.confidence)
+    .slice(0, 10);
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <Header kicker={<span className="chip">Country link</span>} title={`${from?.name ?? rel.from} → ${to?.name ?? rel.to}`} onClose={() => onSelect(null)}>
+        <p className="mt-1 text-xs text-muted-foreground">{STANCE_TEXT[rel.stance]}</p>
+      </Header>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3">
+        <Rows
+          rows={[
+            ["Coded events", rel.events.toLocaleString()],
+            ["Articles", rel.articles.toLocaleString()],
+            ["Outlets", rel.outlets.toLocaleString()],
+            ["Goldstein", `${rel.goldstein > 0 ? "+" : ""}${rel.goldstein.toFixed(2)} (−10 hostile … +10 cooperative)`],
+            ["Media tone", rel.tone.toFixed(2)],
+            ["Dominant type", CATEGORIES[rel.category].label],
+            ["Last coded", ago(rel.lastSeen, now || Date.now())],
+          ]}
+        />
+        <section className="space-y-1">
+          <SectionTitle>Coverage over window</SectionTitle>
+          <Sparkline values={rel.spark} width={320} height={40} className="w-full" label={`Articles over time, ${rel.id}`} />
+        </section>
+        {reverse && (
+          <button
+            type="button"
+            onClick={() => onSelect({ kind: "rel", id: reverse.id })}
+            className="w-full rounded-sm border border-border px-3 py-2 text-left text-xs hover:bg-surface-2/60"
+          >
+            Reverse link: {to?.name ?? rel.to} → {from?.name ?? rel.from}{" "}
+            <span className="text-muted-foreground">
+              · {reverse.stance} · {reverse.articles} articles
+            </span>
+          </button>
+        )}
+        {related.length > 0 && (
+          <section className="space-y-1">
+            <SectionTitle>Related incidents in {to?.name ?? rel.to}</SectionTitle>
+            <IncidentList items={related} now={now} onSelect={onSelect} />
+          </section>
+        )}
+        <p className="text-[11px] leading-relaxed text-muted-foreground">
+          From GDELT&apos;s machine coding of actor nationality in news. A link needs 8+ articles from 2+ outlets across 2+ coded events in
+          the window; it describes coverage, not a verified count of actions.
+        </p>
+      </div>
+      <footer className="flex items-center gap-1.5 border-t border-border px-4 py-2">
         <CopyLink />
       </footer>
     </div>
