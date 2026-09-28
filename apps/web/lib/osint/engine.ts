@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import gazetteerJson from "./data/gazetteer.json";
 import type { GazetteerData } from "./gazetteer";
 import type { Signal, Snapshot, SourceHealth, SourceStatus, WindowKey } from "./types";
@@ -60,6 +61,19 @@ export const liveTransport: Transport = {
     return buf;
   },
 };
+
+/**
+ * Keep a background refresh alive after the response is sent (serverless
+ * platforms may otherwise freeze it). Outside a request, e.g. in tests,
+ * there is nothing to extend and the promise simply runs.
+ */
+function keepAlive(p: Promise<unknown>) {
+  try {
+    after(() => p);
+  } catch {
+    /* not in a request scope */
+  }
+}
 
 interface PullState {
   result?: CollectResult;
@@ -187,6 +201,7 @@ export function createEngine(
     // Stale-while-revalidate: once a source has data, a refresh never holds
     // up the snapshot; only the very first pull is awaited.
     if (!st.result) await st.inflight;
+    else if (st.inflight) keepAlive(st.inflight);
     return st;
   }
 
