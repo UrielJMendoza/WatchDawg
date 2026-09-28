@@ -167,6 +167,10 @@ function compatible(d: Draft, s: Signal, family: Family): boolean {
   // A source never contradicts itself about natural hazards: two USGS
   // quakes are two quakes, not one.
   if (DISTINCT_PER_SOURCE.has(family) && d.sources.has(s.source)) return false;
+  // Crime fuses block to block only. A news report placed at a city's
+  // centre would otherwise attach to whichever police record sits nearest
+  // it, lending a vehicle theft the severity of a mass shooting.
+  if (family === "crime" && (d.precision !== "exact" || s.precision !== "exact")) return false;
   if (!NATURAL.has(family)) {
     if (d.country && s.country && d.country !== s.country) return false;
     // A fix that only names the country says nothing about *where*; such

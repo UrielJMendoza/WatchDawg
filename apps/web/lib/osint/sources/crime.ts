@@ -43,10 +43,12 @@ const LOOKBACK_MS = 16 * 86_400_000;
 const SEVERITY: Array<[RegExp, number, string]> = [
   [/homicide|murder|manslaughter/i, 0.9, "Homicide"],
   [/kidnap|human trafficking|abduct/i, 0.75, "Kidnapping / trafficking"],
-  [/weapon|shots? fired|firearm/i, 0.6, "Weapons offence"],
+  [/shots? fired|shooting/i, 0.65, "Shots fired"],
   [/robbery/i, 0.55, "Robbery"],
   [/arson/i, 0.45, "Arson"],
   [/aggravated|assault/i, 0.45, "Assault"],
+  // Mostly unlawful possession in Chicago's data, not a shooting.
+  [/weapon|firearm/i, 0.4, "Weapons offence"],
   [/burglary/i, 0.3, "Burglary"],
   [/motor vehicle theft|vehicle theft|stolen vehicle/i, 0.25, "Vehicle theft"],
 ];

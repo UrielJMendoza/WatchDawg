@@ -82,6 +82,28 @@ describe("same-story fusion", () => {
     ).toHaveLength(2);
   });
 
+  it("never attaches a city-level crime report to a police record near the centre", () => {
+    const police: Signal = {
+      ...wire({ headline: "", lat: 41.881, lon: -87.63, precision: "exact", country: "US" }),
+      key: "crime:chi:1",
+      source: "crime",
+      category: "crime",
+      title: "Vehicle theft — 1xx W Madison St, Chicago",
+      headline: undefined,
+      severity: 0.25,
+    };
+    const news: Signal = {
+      ...wire({ headline: "Gunman kills 3 at Chicago bar", lat: 41.8781, lon: -87.6298, precision: "city", country: "US" }),
+      key: "gdelt:x",
+      source: "gdelt",
+      category: "crime",
+      severity: 0.8,
+    };
+    const incidents = fuse([police, news]);
+    expect(incidents).toHaveLength(2);
+    expect(incidents.find((i) => i.title.startsWith("Vehicle theft"))!.severity).toBe(0.25);
+  });
+
   it("never merges two precisely located events on wording alone", () => {
     const incidents = fuse([
       wire({ headline: "Russian drone strike kills 3 in Kharkiv", lat: 49.99, lon: 36.23, country: "UA", precision: "city" }),
