@@ -37,10 +37,10 @@ export function TopBar(p: Props) {
   const allDown = p.sources.length > 0 && live === 0 && !p.sources.some((s) => s.status === "degraded");
   return (
     <header className="relative z-40 flex h-12 shrink-0 items-center gap-3 border-b border-border bg-surface/85 px-3 backdrop-blur-md md:px-4">
-      <Link href="/" className="flex items-center gap-2.5 text-foreground" aria-label="WatchDawg home">
+      <Link href="/" className="flex shrink-0 items-center gap-2.5 text-foreground" aria-label="WatchDawg home">
         <Logo className="h-7 w-7" />
         <span className="flex flex-col leading-none">
-          <span className="font-mono text-[13px] font-bold tracking-[0.28em]">WATCHDAWG</span>
+          <span className="hidden font-mono text-[13px] font-bold tracking-[0.28em] min-[420px]:inline">WATCHDAWG</span>
           <span className="hidden font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground sm:block">Global situational awareness</span>
         </span>
       </Link>
@@ -48,12 +48,17 @@ export function TopBar(p: Props) {
       <button
         type="button"
         onClick={p.onSearch}
-        className="group mx-auto flex h-8 w-full max-w-[520px] items-center gap-2 rounded-sm border border-border bg-background/60 px-2.5 text-left text-xs text-muted-foreground transition-colors hover:border-foreground/30"
+        className="group mx-auto flex h-8 w-full min-w-0 max-w-[520px] items-center gap-2 rounded-sm border border-border bg-background/60 px-2.5 text-left text-xs text-muted-foreground transition-colors hover:border-foreground/30"
         aria-label="Search places, incidents and actors"
       >
         <Search className="h-3.5 w-3.5 shrink-0" aria-hidden />
         <span className={cn("flex-1 truncate", p.query && "font-mono text-primary")}>
-          {p.query || "Search places, incidents, actors, or filter…"}
+          {p.query || (
+            <>
+              <span className="sm:hidden">Search…</span>
+              <span className="hidden sm:inline">Search places, incidents, actors, or filter…</span>
+            </>
+          )}
         </span>
         <span className="hidden items-center gap-0.5 sm:flex">
           <kbd className="kbd">⌘</kbd>
@@ -87,11 +92,11 @@ export function TopBar(p: Props) {
             </span>
           </span>
           <span className="font-mono text-[9px] text-muted-foreground">
-            {p.loading ? "refreshing…" : p.generatedAt ? `updated ${ago(p.generatedAt, p.now)}` : "connecting…"}
+            {p.loading ? "refreshing…" : p.generatedAt && p.now ? `updated ${ago(p.generatedAt, p.now)}` : "connecting…"}
           </span>
         </div>
         <div className="border-l border-border pl-3 font-mono text-[11px] tabular-nums text-foreground/90" aria-label="UTC time">
-          {utcClock(p.now)}
+          {p.now ? utcClock(p.now) : "--:--:--"}
           <span className="ml-1 text-[9px] text-muted-foreground">UTC</span>
         </div>
       </div>

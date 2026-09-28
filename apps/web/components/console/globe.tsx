@@ -341,6 +341,14 @@ export default function Globe(props: GlobeProps) {
   const interacting = useRef(false);
   const lastInteraction = useRef(0);
   const hoverCountry = useRef<string | number | null>(null);
+  const pendingCamera = useRef<CameraCommand | null>(null);
+  const loadedRef = useRef(false);
+
+  const applyCamera = useCallback((map: MLMap, c: CameraCommand) => {
+    pendingCamera.current = null;
+    lastInteraction.current = Date.now();
+    runCamera(map, c);
+  }, []);
 
   // ─── Data sync helpers (read latest props from the ref) ─────────────────
   const syncData = useCallback(() => {
@@ -461,7 +469,12 @@ export default function Globe(props: GlobeProps) {
         syncLayers();
         syncMarkers();
       });
-      m.on("load", () => propsRef.current.onReady({ attribution }));
+      m.on("load", () => {
+        loadedRef.current = true;
+        propsRef.current.onReady({ attribution });
+        // A camera command may have arrived while the style was loading.
+        if (pendingCamera.current) applyCamera(m, pendingCamera.current);
+      });
       m.on("styleimagemissing", () => installImages(m));
 
       // Clicks: cluster → zoom in; incident → select; country → select.
@@ -553,13 +566,14 @@ export default function Globe(props: GlobeProps) {
     return () => {
       cancelled = true;
       readyRef.current = false;
+      loadedRef.current = false;
       for (const mk of markers.current) mk.remove();
       markers.current = [];
       map?.remove();
       mapRef.current = null;
     };
     // The map is created once; basemap changes are handled below.
-  }, [syncData, syncSelection, syncLayers, syncMarkers, declutter]);
+  }, [syncData, syncSelection, syncLayers, syncMarkers, declutter, applyCamera]);
 
   // Basemap swap: rebuild the style, data is re-pushed on style.load.
   const firstBasemap = useRef(props.basemap);
@@ -578,41 +592,46 @@ export default function Globe(props: GlobeProps) {
   useEffect(() => syncLayers(), [syncLayers, props.layers]);
   useEffect(() => syncMarkers(), [syncMarkers, props.hotspots]);
 
-  // Camera commands.
+  // Camera commands (queued until the map exists).
   useEffect(() => {
-    const map = mapRef.current;
     const c = props.camera;
-    if (!map || !c) return;
-    lastInteraction.current = Date.now();
-    if (c.reset) {
-      const el = map.getContainer();
-      const pad = panelPadding(el.clientWidth);
-      map.flyTo({
-        center: INITIAL_CENTER,
-        zoom: fitZoom(el.clientWidth - pad.left - pad.right, el.clientHeight - pad.top - pad.bottom),
-        pitch: 0,
-        bearing: 0,
-        duration: 1800,
-        essential: true,
-      });
-      return;
-    }
-    if (c.bbox && c.bbox[2] - c.bbox[0] < 120) {
-      map.fitBounds(
-        [
-          [c.bbox[0], c.bbox[1]],
-          [c.bbox[2], c.bbox[3]],
-        ],
-        { padding: 80, duration: 1800, maxZoom: 7, essential: true },
-      );
-      return;
-    }
-    if (c.lat !== undefined && c.lon !== undefined) {
-      map.flyTo({ center: [c.lon, c.lat], zoom: c.zoom ?? Math.max(map.getZoom(), 5), duration: 1800, essential: true, curve: 1.5 });
-    }
-  }, [props.camera]);
+    if (!c) return;
+    pendingCamera.current = c;
+    const map = mapRef.current;
+    if (map && loadedRef.current) applyCamera(map, c);
+  }, [props.camera, applyCamera]);
 
   return <div ref={container} className="absolute inset-0" aria-label="Interactive 3D globe of live events" role="region" />;
+}
+
+/** Execute a camera command. Stateless so it can run on load or on demand. */
+function runCamera(map: MLMap, c: CameraCommand) {
+  if (c.reset) {
+    const el = map.getContainer();
+    const pad = panelPadding(el.clientWidth);
+    map.flyTo({
+      center: INITIAL_CENTER,
+      zoom: fitZoom(el.clientWidth - pad.left - pad.right, el.clientHeight - pad.top - pad.bottom),
+      pitch: 0,
+      bearing: 0,
+      duration: 1800,
+      essential: true,
+    });
+    return;
+  }
+  if (c.bbox && c.bbox[2] - c.bbox[0] < 120) {
+    map.fitBounds(
+      [
+        [c.bbox[0], c.bbox[1]],
+        [c.bbox[2], c.bbox[3]],
+      ],
+      { padding: 80, duration: 1800, maxZoom: 7, essential: true },
+    );
+    return;
+  }
+  if (c.lat !== undefined && c.lon !== undefined) {
+    map.flyTo({ center: [c.lon, c.lat], zoom: c.zoom ?? Math.max(map.getZoom(), 5), duration: 1800, essential: true, curve: 1.5 });
+  }
 }
 
 function escapeHtml(s: string): string {

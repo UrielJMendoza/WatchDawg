@@ -223,8 +223,27 @@ function IncidentDossier({ inc, incidents, now, onSelect, onFlyTo, country }: Pr
   );
 }
 
+const METRIC_LABELS: Record<string, string> = {
+  magnitude: "Magnitude",
+  depthKm: "Depth (km)",
+  feltReports: "Felt reports",
+  significance: "USGS significance",
+  stations: "Seismic stations",
+  articles: "Articles",
+  outlets: "Outlets",
+  goldstein: "Goldstein scale",
+  tone: "Media tone",
+  cameo: "CAMEO code",
+  fixes: "Track fixes",
+  alert: "GDACS alert",
+  intensity: "Intensity",
+  offence: "Offence",
+  arrest: "Arrest made",
+  sources: "Cited sources",
+};
+
 function FragmentRow({ k, v }: { k: string; v: string }) {
-  const label = k.replace(/([A-Z])/g, " $1").replace(/^./, (m) => m.toUpperCase());
+  const label = METRIC_LABELS[k] ?? k.replace(/([A-Z])/g, " $1").replace(/^./, (m) => m.toUpperCase());
   return (
     <>
       <dt className="text-muted-foreground">{label}</dt>

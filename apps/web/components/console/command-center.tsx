@@ -82,7 +82,8 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
   const [cursor, setCursor] = useState<{ lat: number; lon: number } | null>(null);
   const [view, setView] = useState<ViewInfo>({ zoom: 2, lat: 24, lon: 18, bearing: 0, pitch: 0 });
   const [mobilePanel, setMobilePanel] = useState<"none" | "rail" | "inspector">("none");
-  const [now, setNow] = useState(() => initial?.generatedAt ?? Date.now());
+  // 0 until mounted, so server and client render identical markup.
+  const [now, setNow] = useState(0);
   const [gaz, setGaz] = useState<GazetteerData | null>(null);
 
   useEffect(() => {
@@ -154,7 +155,7 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
       if (s) setMobilePanel("inspector");
       if (s?.kind === "incident") {
         const i = byId.get(s.id);
-        if (i) setCamera({ key: Date.now(), lat: i.lat, lon: i.lon, zoom: i.precision === "country" ? 4 : 6.5 });
+        if (i) setCamera({ key: Date.now(), lat: i.lat, lon: i.lon, zoom: i.precision === "country" ? 4 : 6 });
       } else if (s?.kind === "hotspot") {
         const h = snap?.hotspots.find((x) => x.id === s.id);
         if (h) setCamera({ key: Date.now(), lat: h.lat, lon: h.lon, zoom: 5 });
@@ -252,7 +253,7 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
 
         {/* Map HUD */}
         <div className="pointer-events-none absolute left-1/2 top-3 z-20 flex -translate-x-1/2 flex-col items-center gap-1.5 lg:left-[calc(50%+0px)]">
-          <div className="panel pointer-events-auto flex items-center gap-3 rounded-sm px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider">
+          <div className="panel pointer-events-auto flex items-center gap-3 whitespace-nowrap rounded-sm px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider">
             <span>
               <span className="text-foreground">{compact(visible.length)}</span> <span className="text-muted-foreground">incidents</span>
             </span>
@@ -278,7 +279,10 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
         </div>
 
         {/* Center reticle */}
-        <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 h-6 w-6 -translate-x-1/2 -translate-y-1/2 opacity-40" aria-hidden>
+        <div
+          className="pointer-events-none absolute left-1/2 top-[calc(50%-10px)] z-10 h-6 w-6 -translate-x-1/2 -translate-y-1/2 opacity-40 lg:left-[calc(50%-30px)] lg:top-[calc(50%-45px)]"
+          aria-hidden
+        >
           <span className="absolute left-1/2 top-0 h-2 w-px bg-primary" />
           <span className="absolute bottom-0 left-1/2 h-2 w-px bg-primary" />
           <span className="absolute left-0 top-1/2 h-px w-2 bg-primary" />
@@ -301,7 +305,7 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
         <aside
           className={cn(
             "panel absolute bottom-[132px] left-3 top-3 z-30 w-[320px] overflow-hidden rounded-md",
-            "max-lg:bottom-3 max-lg:w-[min(340px,calc(100vw-24px))] max-lg:transition-transform",
+            "max-lg:bottom-16 max-lg:w-[min(340px,calc(100vw-24px))] max-lg:transition-transform",
             mobilePanel === "rail" ? "max-lg:translate-x-0" : "max-lg:-translate-x-[110%]",
           )}
           aria-label="Filters, hotspots, statistics and sources"
@@ -330,7 +334,7 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
         <aside
           className={cn(
             "panel absolute bottom-[132px] right-3 top-3 z-30 w-[380px] overflow-hidden rounded-md",
-            "max-lg:bottom-3 max-lg:w-[min(400px,calc(100vw-24px))] max-lg:transition-transform",
+            "max-lg:bottom-16 max-lg:w-[min(400px,calc(100vw-24px))] max-lg:transition-transform",
             mobilePanel === "inspector" ? "max-lg:translate-x-0" : "max-lg:translate-x-[110%]",
           )}
           aria-label="Incident details and live feed"
