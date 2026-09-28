@@ -17,8 +17,8 @@
   | NASA EONET | Open natural events from satellite and agency feeds | A |
   | ACLED *(API key)* | Battles, explosions, violence against civilians, riots, protests | A |
   | City police open data | Serious crime reports, San Francisco + Chicago (block-level; sex offences and domestic incidents excluded) | A |
-  | 15 newsrooms (RSS) | BBC, Al Jazeera, NYT, Guardian, France 24, DW, UN News, NPR, Sky, CBC, Kyiv Independent, Times of Israel, Africanews, Middle East Eye — classified and geocoded | B |
-  | GDELT 2.0 | Machine-coded conflict/unrest/diplomacy events from world news, every 15 minutes | C |
+  | 15 newsroom feeds (RSS) | BBC, Al Jazeera, NYT, Guardian, France 24, DW, UN News, NPR (world + US), Sky, CBC, Kyiv Independent, Jerusalem Post, Africanews, Middle East Eye — classified and geocoded | B |
+  | GDELT 2.0 | Machine-coded conflict/unrest/diplomacy events from world news, every 15 minutes; violence claims must match the article headline and appear in 2+ outlets | C |
 - **Live tracks** — military-flagged aircraft and emergency squawks (7500/7600/7700) from ADS-B networks (adsb.lol, airplanes.live), refreshed every 15 s; satellites (stations, military, Earth observation, weather) from checksum-validated CelesTrak element sets, propagated live in the browser with SGP4 and drawn with ground tracks.
 - **Link analysis** — a directed country→country interaction graph from GDELT actor nationality (e.g. Russia → Ukraine), drawn as great-circle arcs coloured by stance (hostile / mixed / cooperative, from the Goldstein scale). A link needs 8+ articles from 2+ outlets across 2+ events in the window.
 - **Watchlist alerts** — watch any country; new incidents there with severity ≥ 60 land in the alert tray and, if allowed, as desktop notifications. Stored only in your browser.

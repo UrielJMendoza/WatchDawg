@@ -184,7 +184,9 @@ export function createEngine(
           s.inflight = undefined;
         });
     }
-    await st.inflight;
+    // Stale-while-revalidate: once a source has data, a refresh never holds
+    // up the snapshot; only the very first pull is awaited.
+    if (!st.result) await st.inflight;
     return st;
   }
 

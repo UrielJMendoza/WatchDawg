@@ -184,10 +184,14 @@ export const wire: SourceAdapter = {
     const seen = new Set<string>();
     const feeds = WIRE_FEEDS;
     const fetchFeed = async (f: (typeof feeds)[number]) => {
+      // One 8 s budget per newsroom, shared by its candidate URLs.
+      const deadline = Date.now() + 8_000;
       let last: unknown;
       for (const url of f.urls) {
+        const timeoutMs = deadline - Date.now();
+        if (timeoutMs < 1_000) break;
         try {
-          return { f, items: parseFeedXml(await ctx.transport.text(url, { timeoutMs: 8_000 })) };
+          return { f, items: parseFeedXml(await ctx.transport.text(url, { timeoutMs })) };
         } catch (err) {
           last = err;
         }
