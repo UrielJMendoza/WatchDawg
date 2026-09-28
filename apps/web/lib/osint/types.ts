@@ -8,7 +8,7 @@
  * incidents concentrate.
  */
 
-export type SourceId = "usgs" | "eonet" | "gdacs" | "gdelt" | "acled" | "crime" | "wire";
+export type SourceId = "usgs" | "eonet" | "gdacs" | "nws" | "gdelt" | "acled" | "crime" | "wire";
 
 export type Category =
   | "conflict"

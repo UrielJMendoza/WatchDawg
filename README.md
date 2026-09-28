@@ -15,6 +15,7 @@
   | USGS | M2.5+ earthquakes, PAGER alerts, review status | A |
   | GDACS (UN/EC) | Cyclones, floods, quakes, volcanoes, drought, fire with Green/Orange/Red alerts | A |
   | NASA EONET | Open natural events from satellite and agency feeds | A |
+| US National Weather Service | Severe and extreme warnings with storm-based polygons: tornado, severe thunderstorm, flash flood, extreme wind, fire | A |
   | ACLED *(API key)* | Battles, explosions, violence against civilians, riots, protests | A |
   | City police open data | Serious crime reports, San Francisco + Chicago (block-level; sex offences and domestic incidents excluded) | A |
   | 15 newsroom feeds (RSS) | BBC, Al Jazeera, NYT, Guardian, France 24, DW, UN News, NPR (world + US), Sky, CBC, Kyiv Independent, Jerusalem Post, Africanews, Middle East Eye — classified and geocoded | B |

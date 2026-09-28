@@ -67,6 +67,7 @@ export const SOURCE_RELIABILITY: Record<SourceId, Reliability> = {
   usgs: "A",
   eonet: "A",
   gdacs: "A",
+  nws: "A",
   acled: "A",
   crime: "A",
   wire: "B",
@@ -77,7 +78,7 @@ const PRECISION_RANK: Record<GeoPrecision, number> = { exact: 4, city: 3, region
 const PRECISION_WEIGHT: Record<GeoPrecision, number> = { exact: 10, city: 5, region: 2, country: 0.5 };
 
 /** Title preference: authoritative instruments, then newsrooms, then machine coding. */
-const TITLE_RANK: Record<SourceId, number> = { usgs: 6, gdacs: 5, eonet: 4, crime: 4, wire: 3, acled: 2, gdelt: 1 };
+const TITLE_RANK: Record<SourceId, number> = { usgs: 6, gdacs: 5, nws: 5, eonet: 4, crime: 4, wire: 3, acled: 2, gdelt: 1 };
 
 interface Draft {
   family: Family;

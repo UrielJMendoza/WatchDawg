@@ -61,6 +61,7 @@ export const SOURCE_LABEL: Record<string, string> = {
   usgs: "USGS",
   eonet: "NASA EONET",
   gdacs: "GDACS",
+  nws: "NWS",
   gdelt: "GDELT",
   acled: "ACLED",
   crime: "Police data",

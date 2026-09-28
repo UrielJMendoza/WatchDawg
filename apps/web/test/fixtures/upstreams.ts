@@ -4,6 +4,7 @@ import type { Transport } from "@/lib/osint/sources/types";
 import { USGS_URL } from "@/lib/osint/sources/usgs";
 import { EONET_URL } from "@/lib/osint/sources/eonet";
 import { GDACS_API } from "@/lib/osint/sources/gdacs";
+import { NWS_API } from "@/lib/osint/sources/nws";
 import { GDELT_LASTUPDATE_PATH } from "@/lib/osint/sources/gdelt";
 import { WIRE_FEEDS } from "@/lib/osint/sources/wire";
 import { CITIES } from "@/lib/osint/sources/crime";
@@ -218,6 +219,56 @@ function gdacsPayload(now: number): string {
   add("DR", "Orange", 5.5, 43.0, "Drought in Horn of Africa", "Somalia", "SO", epoch - 60 * DAY, epoch - DAY, "Severe drought");
   add("VO", "Green", -7.54, 110.44, "Merapi eruption", "Indonesia", "ID", epoch - 3 * DAY, epoch - 6 * HOUR, "VEI 1");
   add("WF", "Green", -10.2, -55.4, "Forest fires in Mato Grosso", "Brazil", "BR", epoch - 2 * DAY, epoch - 2 * HOUR, "12,000 ha");
+  return JSON.stringify({ type: "FeatureCollection", features });
+}
+
+// ─── NWS ─────────────────────────────────────────────────────────────────
+
+function nwsPayload(now: number): string {
+  const epoch = epochOf(now);
+  const iso = (t: number) => new Date(t).toISOString().replace(/\.\d{3}Z$/, "+00:00");
+  const box = (lat: number, lon: number, d = 0.12) => ({
+    type: "Polygon",
+    coordinates: [[[lon - d, lat - d], [lon + d, lat - d], [lon + d, lat + d], [lon - d, lat + d], [lon - d, lat - d]]],
+  });
+  let n = 0;
+  const alert = (o: {
+    event: string; severity: string; certainty?: string; urgency?: string; area: string; sent: number; ends: number;
+    geometry: unknown; vtec?: string; messageType?: string; params?: Record<string, string[]>;
+  }) => {
+    n++;
+    const id = `urn:oid:2.49.0.1.840.0.sim${n}`;
+    return {
+      id: `${SIM}/nws/alerts/${id}`,
+      type: "Feature",
+      geometry: o.geometry,
+      properties: {
+        "@id": `${SIM}/nws/alerts/${id}`, "@type": "wx:Alert", id, areaDesc: o.area,
+        sent: iso(o.sent), effective: iso(o.sent), onset: iso(o.sent), expires: iso(o.ends), ends: iso(o.ends),
+        status: "Actual", messageType: o.messageType ?? "Alert", category: "Met",
+        severity: o.severity, certainty: o.certainty ?? "Likely", urgency: o.urgency ?? "Immediate",
+        event: o.event, senderName: "NWS Sim Office", headline: `${o.event} issued for ${o.area}`,
+        description: `Simulated ${o.event.toLowerCase()} for pipeline tests.`,
+        parameters: { ...(o.vtec ? { VTEC: [o.vtec] } : {}), ...(o.params ?? {}) },
+      },
+    };
+  };
+  const vt = (action: string, office: string, ph: string, etn: string) => `/O.${action}.${office}.${ph}.W.${etn}.260928T0500Z-260928T0700Z/`;
+  const features = [
+    // A tornado warning and its later update: one event after VTEC dedupe.
+    alert({ event: "Tornado Warning", severity: "Extreme", certainty: "Observed", area: "Tulsa, OK; Wagoner, OK", sent: epoch - 40 * MIN, ends: epoch + 45 * MIN, geometry: box(36.1, -95.8), vtec: vt("NEW", "KTSA", "TO", "0042"), params: { tornadoDetection: ["OBSERVED"], tornadoDamageThreat: ["CONSIDERABLE"] } }),
+    alert({ event: "Tornado Warning", severity: "Extreme", certainty: "Observed", area: "Tulsa, OK; Wagoner, OK; Rogers, OK", sent: epoch - 15 * MIN, ends: epoch + 45 * MIN, geometry: box(36.15, -95.7), vtec: vt("CON", "KTSA", "TO", "0042"), messageType: "Update", params: { tornadoDetection: ["OBSERVED"] } }),
+    alert({ event: "Flash Flood Warning", severity: "Severe", area: "Harris, TX", sent: epoch - 70 * MIN, ends: epoch + 2 * HOUR, geometry: box(29.76, -95.37, 0.2), vtec: vt("NEW", "KHGX", "FF", "0107") }),
+    alert({ event: "Severe Thunderstorm Warning", severity: "Severe", area: "Polk, IA", sent: epoch - 25 * MIN, ends: epoch + 30 * MIN, geometry: box(41.6, -93.6), vtec: vt("NEW", "KDMX", "SV", "0311") }),
+    // Zone-based: no polygon of its own.
+    alert({ event: "Winter Storm Warning", severity: "Severe", area: "Northern Cascades", sent: epoch - 3 * HOUR, ends: epoch + DAY, geometry: null }),
+    // Below the severity bar.
+    alert({ event: "Flood Advisory", severity: "Minor", area: "Dade, FL", sent: epoch - HOUR, ends: epoch + HOUR, geometry: box(25.8, -80.2) }),
+    // Cancelled early.
+    alert({ event: "Tornado Warning", severity: "Extreme", area: "Hinds, MS", sent: epoch - 20 * MIN, ends: epoch + 10 * MIN, geometry: box(32.3, -90.2), vtec: vt("CAN", "KJAN", "TO", "0017"), messageType: "Update" }),
+    // Malformed: no event name.
+    { type: "Feature", geometry: box(40, -100), properties: { id: "urn:oid:broken", areaDesc: "Nowhere", sent: iso(epoch), status: "Actual", messageType: "Alert", severity: "Severe" } },
+  ];
   return JSON.stringify({ type: "FeatureCollection", features });
 }
 
@@ -535,6 +586,7 @@ export function fixtureTransport(now: number): Transport {
     if (url === USGS_URL) return usgsPayload(now);
     if (url === EONET_URL) return eonetPayload(now);
     if (url.startsWith(`${GDACS_API}/SEARCH`)) return gdacsPayload(now);
+    if (url.startsWith(NWS_API)) return nwsPayload(now);
     if (url.endsWith(GDELT_LASTUPDATE_PATH)) return gdeltManifest(now);
     if (WIRE_FEEDS.some((f) => f.urls[0] === url)) return wireFeed(url, now);
     if (CITIES.some((c) => url.startsWith(c.url("").split("?")[0]))) return crimePayload(url, now);

@@ -32,6 +32,16 @@ describe("pipeline on fixture upstreams", () => {
     expect(by.crime.reasons["relevance.privacy"]).toBeGreaterThan(0);
     expect(by.crime.reasons["dedupe.incident"]).toBeGreaterThan(0);
 
+    expect(by.nws.status).toBe("ok");
+    expect(by.nws.accepted).toBe(3);
+    expect(by.nws.reasons).toMatchObject({
+      "dedupe.vtec": 1,
+      "geo.zone_only": 1,
+      "relevance.minor": 1,
+      "status.ended": 1,
+      schema: 1,
+    });
+
     // No credentials in the test environment.
     expect(by.acled.status).toBe("disabled");
   });

@@ -8,6 +8,7 @@ import type { CollectResult, SourceAdapter, Transport } from "./sources/types";
 import { usgs } from "./sources/usgs";
 import { eonet } from "./sources/eonet";
 import { gdacs } from "./sources/gdacs";
+import { nws } from "./sources/nws";
 import { gdelt } from "./sources/gdelt";
 import { acled } from "./sources/acled";
 import { crime } from "./sources/crime";
@@ -25,7 +26,7 @@ import { buildRelations } from "./relations";
  */
 
 export const gazetteer = gazetteerJson as unknown as GazetteerData;
-export const ADAPTERS: SourceAdapter[] = [usgs, gdacs, eonet, acled, gdelt, wire, crime];
+export const ADAPTERS: SourceAdapter[] = [usgs, gdacs, nws, eonet, acled, gdelt, wire, crime];
 
 const HORIZON_MS = WINDOWS["30d"];
 const PULL_TIMEOUT_MS = 25_000;

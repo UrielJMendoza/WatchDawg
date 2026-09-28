@@ -85,7 +85,7 @@ export function SituationBrief({ snap, heading, incidents }: { snap: Snapshot | 
         <TopicNav />
       </div>
       <p className="mt-6 text-xs text-muted-foreground">
-        Data: USGS, NASA EONET, GDACS, GDELT, ACLED, San Francisco &amp; Chicago police open data and international newsrooms. See the{" "}
+        Data: USGS, NASA EONET, GDACS, US National Weather Service, GDELT, ACLED, San Francisco &amp; Chicago police open data and international newsrooms. See the{" "}
         <Link href="/methodology">methodology</Link> for how sources are validated, fused and graded.
       </p>
     </section>

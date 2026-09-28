@@ -5,7 +5,7 @@ import { SITE_NAME, SITE_TAGLINE, siteUrl } from "@/lib/site";
 import "./globals.css";
 
 const description =
-  "WatchDawg is a live 3D globe of world events — wars and armed conflict, terrorism, crime, protests, earthquakes, storms, wildfires and floods — fused from USGS, NASA, GDACS, GDELT, ACLED, police open data and global newsrooms, with every source validated and graded.";
+  "WatchDawg is a live 3D globe of world events — wars and armed conflict, terrorism, crime, protests, earthquakes, storms, wildfires and floods — fused from USGS, NASA, GDACS, the National Weather Service, GDELT, ACLED, police open data and global newsrooms, with every source validated and graded.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
