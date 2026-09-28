@@ -379,7 +379,12 @@ export function groupsToSignals(
       },
     });
   }
-  signals.sort((a, b) => b.severity * Math.log2(1 + b.reports) - a.severity * Math.log2(1 + a.reports));
+  // Keep the strongest groups, weighted towards the newest: a day of
+  // exports must not crowd the last hour out of the 1h view.
+  const newest = signals.reduce((m, s) => Math.max(m, s.time), 0);
+  const weight = (s: Signal) =>
+    s.severity * Math.log2(1 + s.reports) * (1 - 0.6 * Math.min(1, (newest - s.time) / 86_400_000));
+  signals.sort((a, b) => weight(b) - weight(a));
   if (signals.length > MAX_GROUPS) {
     for (let i = MAX_GROUPS; i < signals.length; i++) ledger.filter("volume.cap");
     signals.length = MAX_GROUPS;
