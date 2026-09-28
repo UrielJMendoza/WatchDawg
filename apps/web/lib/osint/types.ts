@@ -62,6 +62,11 @@ export interface Signal {
   time: number;
   /** Epoch ms of the earliest observation folded into this signal. */
   firstTime?: number;
+  /**
+   * The location is a guess (a demonym, or a country a machine coder
+   * assigned), so the same story reported elsewhere may be the real place.
+   */
+  geoWeak?: boolean;
   /** 0..1 — how bad is it. */
   severity: number;
   /** 0..1 — how strong is the evidence within this one source. */

@@ -409,6 +409,7 @@ export function groupsToSignals(
       precision: geo.precision,
       place: geo.place,
       country: geo.country,
+      ...(geo.precision === "country" && !relocated ? { geoWeak: true } : {}),
       time,
       firstTime: first,
       severity: clamp01(severity * (0.75 + 0.25 * attention) * (geo.precision === "country" ? 0.85 : 1)),

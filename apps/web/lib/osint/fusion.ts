@@ -91,7 +91,16 @@ interface Draft {
   sources: Set<SourceId>;
   keys: Set<string>;
   /** Content words of each member headline, for same-story matching. */
-  stories: Array<{ words: Set<string>; vague: boolean }>;
+  stories: Story[];
+}
+
+interface Story {
+  words: Set<string>;
+  /** Located only to a country. */
+  vague: boolean;
+  /** That country is itself a guess (see Signal.geoWeak). */
+  weak: boolean;
+  country?: string;
 }
 
 const STOP = new Set([
@@ -110,6 +119,8 @@ export function headlineWords(text: string | undefined): Set<string> {
     if (w.length > 5 && w.endsWith("ing")) w = w.slice(0, -3);
     else if (w.length > 4 && w.endsWith("ed")) w = w.slice(0, -2);
     else if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) w = w.slice(0, -1);
+    // "release"/"released" → "releas", "strike"/"strikes" → "strik".
+    if (w.length > 4 && w.endsWith("e")) w = w.slice(0, -1);
     out.add(w);
   }
   return out;
@@ -292,7 +303,7 @@ export function fuse(signals: Signal[]): Incident[] {
   const grid = new Map<string, Draft[]>();
   // Human-domain drafts by family and country, for same-story matching of
   // country-level reports that the distance rules can't reach.
-  const byCountry = new Map<string, Draft[]>();
+  const byFamily = new Map<Family, Draft[]>();
   // One article is one story: GDELT codes an article once per place it
   // mentions, and syndicated copies repeat a headline word for word.
   const byArticle = new Map<string, Draft>();
@@ -310,7 +321,8 @@ export function fuse(signals: Signal[]): Incident[] {
     const keys = wide ? neighbourKeys(s.lat, s.lon, CELL * 2).map((k) => `w${k}`) : neighbourKeys(s.lat, s.lon, CELL);
     const human = !NATURAL.has(family);
     const vague = s.precision === "country";
-    const words = human && s.country ? headlineWords(s.headline) : new Set<string>();
+    const words = human ? headlineWords(s.headline) : new Set<string>();
+    const story: Story = { words, vague, weak: !!s.geoWeak, country: s.country };
     const articleKeys = human ? articleKeysOf(family, s) : [];
     let best: Draft | null = null;
     for (const k of articleKeys) {
@@ -332,19 +344,26 @@ export function fuse(signals: Signal[]): Incident[] {
       }
     }
     if (!best && words.size) {
-      // A report that only names the country joins the incident in that
-      // country that tells the same story. Two located reports never merge
-      // on wording alone (two strikes, two cities, same phrasing).
-      for (const d of byCountry.get(`${family}|${s.country}`) ?? []) {
+      // A report that only names the country joins the incident that tells
+      // the same story in that country, or anywhere when either side's
+      // country is only a guess. Two located reports never merge on
+      // wording alone (two strikes, two cities, same phrasing).
+      for (const d of byFamily.get(family) ?? []) {
         if (d.keys.has(s.key) || Math.abs(s.time - d.lastSeen) > RULES.humanRegion.gapMs) continue;
-        if (d.stories.some((st) => (vague || st.vague) && sameStory(words, st.words))) {
+        const match = d.stories.some(
+          (st) =>
+            (vague || st.vague) &&
+            ((!!s.country && st.country === s.country) || story.weak || st.weak) &&
+            sameStory(words, st.words),
+        );
+        if (match) {
           best = d;
           break;
         }
       }
     }
     if (best) {
-      if (words.size) best.stories.push({ words, vague });
+      if (words.size) best.stories.push(story);
       best.signals.push(s);
       best.sources.add(s.source);
       best.keys.add(s.key);
@@ -363,15 +382,14 @@ export function fuse(signals: Signal[]): Incident[] {
       lastSeen: s.time,
       sources: new Set([s.source]),
       keys: new Set([s.key]),
-      stories: words.size ? [{ words, vague }] : [],
+      stories: words.size ? [story] : [],
     };
     drafts.push(d);
     for (const k of articleKeys) if (!byArticle.has(k)) byArticle.set(k, d);
-    if (human && s.country) {
-      const k = `${family}|${s.country}`;
-      const list = byCountry.get(k);
+    if (human) {
+      const list = byFamily.get(family);
       if (list) list.push(d);
-      else byCountry.set(k, [d]);
+      else byFamily.set(family, [d]);
     }
     // Register in both the fine and the wide grid so either kind of lookup finds it.
     const fine = cellKey(s.lat, s.lon, CELL);

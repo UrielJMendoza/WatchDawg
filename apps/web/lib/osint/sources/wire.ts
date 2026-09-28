@@ -160,6 +160,7 @@ export function itemsToSignals(
       precision: geo.precision,
       place: geo.place,
       country: geo.country,
+      ...(geo.weak ? { geoWeak: true } : {}),
       time,
       severity,
       quality: 0.6,

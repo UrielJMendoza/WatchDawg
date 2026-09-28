@@ -67,6 +67,21 @@ describe("same-story fusion", () => {
     expect(incidents).toHaveLength(2);
   });
 
+  it("lets a report placed only by a demonym join the same story elsewhere", () => {
+    const incidents = fuse([
+      wire({ headline: "Lebanon says Israeli army set off large explosion in south", country: "LB", lat: 33.9, lon: 35.9, precision: "country", quality: 0.9 }),
+      wire({ headline: "Israeli army set off large explosion in south, report says", country: "IL", lat: 31.5, lon: 34.8, precision: "country", geoWeak: true }),
+    ]);
+    expect(incidents).toHaveLength(1);
+    // Without the weak flag the two countries stay apart.
+    expect(
+      fuse([
+        wire({ headline: "Lebanon says Israeli army set off large explosion in south", country: "LB", lat: 33.9, lon: 35.9, precision: "country" }),
+        wire({ headline: "Israeli army set off large explosion in south, report says", country: "IL", lat: 31.5, lon: 34.8, precision: "country" }),
+      ]),
+    ).toHaveLength(2);
+  });
+
   it("never merges two precisely located events on wording alone", () => {
     const incidents = fuse([
       wire({ headline: "Russian drone strike kills 3 in Kharkiv", lat: 49.99, lon: 36.23, country: "UA", precision: "city" }),
