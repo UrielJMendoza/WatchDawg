@@ -248,10 +248,12 @@ const METRIC_LABELS: Record<string, string> = {
   feltReports: "Felt reports",
   significance: "USGS significance",
   stations: "Seismic stations",
-  articles: "Articles",
-  outlets: "Outlets",
+  // GDELT's own counts for its coded event; the Reports row above totals
+  // every source.
+  articles: "GDELT articles",
+  outlets: "GDELT outlets",
   goldstein: "Goldstein scale",
-  tone: "Media tone",
+  tone: "Media tone (GDELT)",
   cameo: "CAMEO code",
   fixes: "Track fixes",
   alert: "GDACS alert",
