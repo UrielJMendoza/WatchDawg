@@ -110,10 +110,45 @@ export function polygonCenter(geom: { type: string; coordinates: unknown[] }): {
   return n ? { lon: sx / n, lat: sy / n } : null;
 }
 
-function placeOf(areaDesc: string): string {
+const STATES: Record<string, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut",
+  DE: "Delaware", DC: "District of Columbia", FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois",
+  IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana",
+  NE: "Nebraska", NV: "Nevada", NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York",
+  NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania",
+  RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah",
+  VT: "Vermont", VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+  PR: "Puerto Rico", GU: "Guam", VI: "US Virgin Islands", AS: "American Samoa", MP: "Northern Mariana Islands",
+};
+
+/** "Lake, IL" → "Lake County, Illinois"; parishes and boroughs where those are the unit. */
+function countyName(area: string): string {
+  const m = /^(.+?),\s*([A-Z]{2})$/.exec(area);
+  if (!m || !STATES[m[2]]) return area;
+  const [, name, st] = m;
+  const unit = /\b(county|parish|borough|city|census area|municipality)\b/i.test(name)
+    ? ""
+    : st === "LA" ? " Parish" : st === "AK" ? " Borough" : " County";
+  return `${name}${unit}, ${STATES[st]}`;
+}
+
+export function placeOf(areaDesc: string): string {
   const parts = areaDesc.split(";").map((s) => s.trim()).filter(Boolean);
   if (!parts.length) return "United States";
-  return parts.length > 2 ? `${parts.slice(0, 2).join("; ")} +${parts.length - 2}` : parts.join("; ");
+  return `${countyName(parts[0])}${parts.length > 1 ? ` +${parts.length - 1}` : ""}`;
+}
+
+/**
+ * Base severity by event: the CAP severity field rates a river flood and a
+ * tornado alike ("Severe"), which would rank a slow river rise above a war.
+ */
+function baseSeverity(event: string, severity: string): number | undefined {
+  const base = SEVERITY[severity];
+  if (base == null) return undefined;
+  if (/tornado|extreme wind|hurricane|typhoon|storm surge|tsunami/i.test(event)) return Math.max(base, 0.85);
+  if (/^flood (warning|statement)|red flag|heat|freeze|frost|wind chill|cold/i.test(event)) return Math.min(base, 0.45);
+  return base;
 }
 
 export function parseNws(json: unknown, ctx: Pick<CollectContext, "now" | "horizonMs">): CollectResult {
@@ -135,7 +170,7 @@ export function parseNws(json: unknown, ctx: Pick<CollectContext, "now" | "horiz
       ledger.filter("status.not_actual");
       continue;
     }
-    const base = SEVERITY[p.severity];
+    const base = baseSeverity(p.event, p.severity);
     if (base == null) {
       ledger.filter("relevance.minor");
       continue;

@@ -161,8 +161,8 @@ const RULES: Array<[RegExp, Category, number]> = [
   // but alone ("Supreme Court ruling") are not enough to make an event.
   [LEGAL_VOCAB, "crime", 1],
   [/\b(protests?|protesters?|demonstrat\w*|riots?|rally|rallies|march(?:es|ed)? (?:against|for)|strike action|walkout|unrest|tear gas|crackdown)\b/i, "unrest", 3],
-  [/\b(threat\w*|warns?|warning|sanction\w*|tensions?|ultimatum|mobili[sz]\w*|military drills?|exercises|standoff|expel\w*|summon\w*|embargo)\b/i, "tension", 2],
-  [/\b(talks|summit|agreement|deal|treaty|ceasefire|truce|negotiat\w*|diplomat\w*|election\w*|vote|minister visits?|meets? with|accord)\b/i, "diplomacy", 2],
+  [/\b(threat\w*|warns?|warning|sanction\w*|tensions?|ultimatum|mobili[sz]\w*|military drills?|(?:military|joint|naval|war) exercises?|exercises|standoff|expel\w*|summon\w*|embargo|tariffs?|retaliat\w*|condemn\w*|accus\w*|blockade|provocation)\b/i, "tension", 2],
+  [/\b(talks|summit|agreement|deal|treaty|ceasefire|truce|negotiat\w*|diplomat\w*|election\w*|vote|electoral|minister visits?|meets? with|state visit|visits?|visited|envoys?|ambassadors?|foreign minister|bilateral|cooperation|partnership|pact|alliance|accord)\b/i, "diplomacy", 2],
   [/\b(refugees?|displaced|humanitarian|aid|famine|hunger|starvation|cholera|outbreak|epidemic|mpox|ebola|measles|evacuat\w*)\b/i, "humanitarian", 2],
   [/\b(earthquake|quake|tremor|tsunami|seismic)\b/i, "seismic", 4],
   [/\b(volcan\w*|eruption|erupts?|lava|ash cloud)\b/i, "volcanic", 4],

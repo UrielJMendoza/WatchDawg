@@ -361,6 +361,18 @@ export function groupsToSignals(
         category = "crime";
         label = "Crime report";
       }
+    } else if (headline) {
+      // Civil coding gets the same cross-check: GDELT filed a coffee chain
+      // closing stores as "tension" and a legal essay as "protest".
+      const cls = classifyText(headline);
+      if (!cls || cls.score < MIN_TEXT_SCORE || NOT_AN_EVENT.test(headline) || domainOf(cls.category) === "hazard") {
+        ledger.filter("relevance.headline_mismatch");
+        continue;
+      }
+      if (cls.category === "crime") {
+        category = "crime";
+        label = "Crime report";
+      }
     }
     const attention = Math.min(1, Math.log10(1 + g.articles) / 2);
     const geoName = lead.geoName.replace(/\s*\(general\)/gi, "");
