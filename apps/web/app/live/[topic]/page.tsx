@@ -54,7 +54,7 @@ export default async function TopicPage({ params }: { params: Params }) {
       },
       {
         "@type": "ItemList",
-        name: `${t.h1}: latest incidents`,
+        name: `${t.h1}: most significant incidents`,
         numberOfItems: Math.min(incidents.length, 20),
         itemListElement: incidents.slice(0, 20).map((i, n) => ({
           "@type": "ListItem",

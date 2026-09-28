@@ -11,8 +11,21 @@ import { TopicNav } from "./site-header";
  * plain semantic HTML. It is what search engines index and what screen
  * readers read, and it sits right below the console for anyone who scrolls.
  */
+const SPAN: Record<Snapshot["window"], string> = {
+  "1h": "the last hour",
+  "6h": "the last 6 hours",
+  "24h": "the last 24 hours",
+  "7d": "the last 7 days",
+  "30d": "the last 30 days",
+};
+
 export function SituationBrief({ snap, heading, incidents }: { snap: Snapshot | null; heading: string; incidents?: Incident[] }) {
-  const list = (incidents ?? snap?.incidents ?? []).slice(0, 40);
+  // Counts describe what this page lists (a topic or country), in the
+  // snapshot's own window.
+  const scoped = incidents ?? snap?.incidents ?? [];
+  const list = scoped.slice(0, 40);
+  const countries = new Set(scoped.map((i) => i.country).filter(Boolean)).size;
+  const corroborated = scoped.filter((i) => i.sources.length > 1).length;
   const updated = snap ? new Date(snap.generatedAt) : null;
   return (
     <section aria-labelledby="brief-heading" className="mx-auto max-w-5xl px-4 py-12 text-sm">
@@ -21,8 +34,8 @@ export function SituationBrief({ snap, heading, incidents }: { snap: Snapshot | 
       </h1>
       {updated && (
         <p className="mt-1 text-muted-foreground">
-          Updated <time dateTime={updated.toISOString()}>{updated.toUTCString()}</time> · {snap!.stats.incidents} incidents across {snap!.stats.countries}{" "}
-          countries in the last 24 hours · {snap!.stats.corroborated} corroborated by independent sources.
+          Updated <time dateTime={updated.toISOString()}>{updated.toUTCString()}</time> · {scoped.length} incidents across {countries}{" "}
+          {countries === 1 ? "country" : "countries"} in {SPAN[snap!.window]} · {corroborated} corroborated by independent sources.
         </p>
       )}
       {snap && snap.hotspots.length > 0 && !incidents && (
@@ -46,7 +59,7 @@ export function SituationBrief({ snap, heading, incidents }: { snap: Snapshot | 
           </ol>
         </>
       )}
-      <h2 className="mt-8 text-lg font-semibold">Latest incidents</h2>
+      <h2 className="mt-8 text-lg font-semibold">Most significant incidents</h2>
       {list.length === 0 ? (
         <p className="mt-2 text-muted-foreground">No incidents reported in this window yet.</p>
       ) : (

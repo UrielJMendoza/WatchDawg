@@ -129,10 +129,13 @@ export function headlineWords(text: string | undefined): Set<string> {
 /** Live blogs and roundups cover many events under one URL and headline. */
 const ROUNDUP = /\b(latest|live|updates?|roundup|as it happened|what we know|key events|day \d+|briefing|newsletter)\b/i;
 
+/** Sources whose URL identifies one news article (police records all link to their dataset). */
+const ARTICLE_SOURCES = new Set<SourceId>(["gdelt", "wire"]);
+
 /** Identity keys for the article behind a signal: its URL and its exact headline. */
 function articleKeysOf(family: Family, s: Signal): string[] {
   const keys: string[] = [];
-  if (ROUNDUP.test(s.headline ?? s.title)) return keys;
+  if (!ARTICLE_SOURCES.has(s.source) || ROUNDUP.test(s.headline ?? s.title)) return keys;
   if (s.url) keys.push(`${family}|u|${s.url.replace(/[?#].*$/, "").replace(/\/$/, "")}`);
   const words = headlineWords(s.headline);
   // Short headlines ("Explosion in Kyiv") are too generic to be identity.

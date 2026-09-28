@@ -82,6 +82,27 @@ describe("same-story fusion", () => {
     ).toHaveLength(2);
   });
 
+  it("keeps police records apart even though they share a dataset URL", () => {
+    const record = (n: number, lat: number, severity: number, title: string): Signal => ({
+      ...wire({ headline: "", lat, lon: -87.65, precision: "exact", country: "US" }),
+      key: `crime:chi:${n}`,
+      source: "crime",
+      category: "crime",
+      title,
+      headline: undefined,
+      url: "https://data.cityofchicago.org/d/ijzp-q8t2",
+      severity,
+      time: T - n * 3_600_000,
+    });
+    const incidents = fuse([
+      record(1, 41.7, 0.25, "Vehicle theft — 134xx S Mackinaw Ave, Chicago"),
+      record(2, 41.9, 0.9, "Homicide — 8xx N Kedzie Ave, Chicago"),
+      record(3, 41.8, 0.55, "Robbery — 1xx W 63rd St, Chicago"),
+    ]);
+    expect(incidents).toHaveLength(3);
+    expect(incidents.find((i) => i.title.startsWith("Vehicle theft"))!.severity).toBe(0.25);
+  });
+
   it("never attaches a city-level crime report to a police record near the centre", () => {
     const police: Signal = {
       ...wire({ headline: "", lat: 41.881, lon: -87.63, precision: "exact", country: "US" }),
