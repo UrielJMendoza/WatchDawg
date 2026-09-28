@@ -42,8 +42,9 @@ export const TOPICS: Topic[] = [
     description:
       "Serious crime from official police open data (San Francisco, Chicago) plus crime headlines from international newsrooms, validated and mapped.",
     intro:
-      "Homicides, shootings, robberies, assaults and other serious offences from police open-data portals over the last 7 days, alongside geocoded crime reporting. Police data is published with a lag of one to eight days; sex offences and domestic incidents are excluded to protect victims.",
-    window: "7d",
+      "Homicides, shootings, robberies, assaults and other serious offences from the latest two weeks of police open-data reports, alongside geocoded crime reporting. Police portals publish with a lag of one to eight days, so this page looks back 30 days; sex offences and domestic incidents are excluded to protect victims.",
+    // Portals lag up to ~8 days: a 7-day window can miss them entirely.
+    window: "30d",
     query: "cat:crime",
     keywords: ["live crime map", "crime map", "shootings map", "chicago crime map", "san francisco crime map"],
     match: cats("crime"),
