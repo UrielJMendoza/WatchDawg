@@ -44,6 +44,8 @@ export interface GeoMatch {
   country: string;
   /** The text that matched. */
   matched: string;
+  /** Only a demonym matched ("Israeli army…"): the actor's country, not necessarily the place. */
+  weak?: boolean;
 }
 
 /** City names that collide with everyday English words or first names. */
@@ -160,7 +162,8 @@ export function countryByIso2(data: GazetteerData, iso2: string | undefined | nu
 export function geocodeText(data: GazetteerData, text: string): GeoMatch | null {
   const { phrases, maxWords } = getIndex(data);
   const words = stripDiacritics(text).match(/[A-Za-z][A-Za-z'’.-]*/g) ?? [];
-  const clean = words.map((w) => w.replace(/[.'’-]+$/, "").replace(/'s$/i, ""));
+  // Possessives in either apostrophe ("Kyiv's", "Kyiv’s"), then trailing punctuation.
+  const clean = words.map((w) => w.replace(/['’]s$/i, "").replace(/[.'’-]+$/, ""));
 
   const cities: Array<{ row: CityRow; pos: number; text: string }> = [];
   const countries: Array<{
@@ -240,6 +243,7 @@ export function geocodeText(data: GazetteerData, text: string): GeoMatch | null 
       place: first.row.name,
       country: first.row.iso2,
       matched: first.text,
+      ...(first.weak ? { weak: true } : {}),
     };
   }
   return null;

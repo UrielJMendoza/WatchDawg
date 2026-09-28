@@ -49,6 +49,24 @@ describe("same-story fusion", () => {
     expect(strike.precision).toBe("region");
   });
 
+  it("treats one article coded at two places as one story", () => {
+    const url = "https://news.example/2026/09/28/two-mass-shootings-in-south-africa-leave-28-dead";
+    const incidents = fuse([
+      wire({ source: "gdelt", key: "gdelt:a", headline: "Two mass shootings in South Africa leave 28 dead", url, country: "ZA", lat: -26.2, lon: 28.04, precision: "city" }),
+      wire({ source: "gdelt", key: "gdelt:b", headline: "Two mass shootings in South Africa leave 28 dead", url, country: "ZA", lat: -33.92, lon: 18.42, precision: "city" }),
+    ]);
+    expect(incidents).toHaveLength(1);
+  });
+
+  it("keeps separate events from one live blog apart", () => {
+    const url = "https://news.example/live/ukraine-war-latest";
+    const incidents = fuse([
+      wire({ source: "gdelt", key: "gdelt:kyiv", headline: "Ukraine war latest: Russia strikes Kyiv and Kharkiv overnight", url, country: "UA", lat: 50.45, lon: 30.52, precision: "city" }),
+      wire({ source: "gdelt", key: "gdelt:kharkiv", headline: "Ukraine war latest: Russia strikes Kyiv and Kharkiv overnight", url, country: "UA", lat: 49.99, lon: 36.23, precision: "city" }),
+    ]);
+    expect(incidents).toHaveLength(2);
+  });
+
   it("never merges two precisely located events on wording alone", () => {
     const incidents = fuse([
       wire({ headline: "Russian drone strike kills 3 in Kharkiv", lat: 49.99, lon: 36.23, country: "UA", precision: "city" }),

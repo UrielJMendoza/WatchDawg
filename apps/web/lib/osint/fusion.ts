@@ -115,6 +115,20 @@ export function headlineWords(text: string | undefined): Set<string> {
   return out;
 }
 
+/** Live blogs and roundups cover many events under one URL and headline. */
+const ROUNDUP = /\b(latest|live|updates?|roundup|as it happened|what we know|key events|day \d+|briefing|newsletter)\b/i;
+
+/** Identity keys for the article behind a signal: its URL and its exact headline. */
+function articleKeysOf(family: Family, s: Signal): string[] {
+  const keys: string[] = [];
+  if (ROUNDUP.test(s.headline ?? s.title)) return keys;
+  if (s.url) keys.push(`${family}|u|${s.url.replace(/[?#].*$/, "").replace(/\/$/, "")}`);
+  const words = headlineWords(s.headline);
+  // Short headlines ("Explosion in Kyiv") are too generic to be identity.
+  if (words.size >= 5) keys.push(`${family}|h|${[...words].sort().join(" ")}`);
+  return keys;
+}
+
 /**
  * Two headlines tell the same story: at least three shared content words
  * covering most of the shorter one, including a number (a toll, a count)
@@ -279,6 +293,9 @@ export function fuse(signals: Signal[]): Incident[] {
   // Human-domain drafts by family and country, for same-story matching of
   // country-level reports that the distance rules can't reach.
   const byCountry = new Map<string, Draft[]>();
+  // One article is one story: GDELT codes an article once per place it
+  // mentions, and syndicated copies repeat a headline word for word.
+  const byArticle = new Map<string, Draft>();
   const drafts: Draft[] = [];
   const ordered = [...signals].sort(
     (a, b) =>
@@ -291,9 +308,20 @@ export function fuse(signals: Signal[]): Incident[] {
     const wide =
       ruleFor({ family, precision: s.precision }).km > 200 || (NATURAL.has(family) && s.precision === "country");
     const keys = wide ? neighbourKeys(s.lat, s.lon, CELL * 2).map((k) => `w${k}`) : neighbourKeys(s.lat, s.lon, CELL);
+    const human = !NATURAL.has(family);
+    const vague = s.precision === "country";
+    const words = human && s.country ? headlineWords(s.headline) : new Set<string>();
+    const articleKeys = human ? articleKeysOf(family, s) : [];
     let best: Draft | null = null;
-    let bestKm = Infinity;
-    for (const k of keys) {
+    for (const k of articleKeys) {
+      const d = byArticle.get(k);
+      if (d && !d.keys.has(s.key) && Math.abs(s.time - d.lastSeen) <= RULES.humanRegion.gapMs) {
+        best = d;
+        break;
+      }
+    }
+    let bestKm = best ? 0 : Infinity;
+    for (const k of best ? [] : keys) {
       for (const d of grid.get(k) ?? []) {
         if (d.keys.has(s.key) || !compatible(d, s, family)) continue;
         const km = haversineKm(d.lat, d.lon, s.lat, s.lon);
@@ -303,9 +331,6 @@ export function fuse(signals: Signal[]): Incident[] {
         }
       }
     }
-    const human = !NATURAL.has(family) && !!s.country;
-    const vague = s.precision === "country";
-    const words = human ? headlineWords(s.headline) : new Set<string>();
     if (!best && words.size) {
       // A report that only names the country joins the incident in that
       // country that tells the same story. Two located reports never merge
@@ -325,6 +350,7 @@ export function fuse(signals: Signal[]): Incident[] {
       best.keys.add(s.key);
       best.lastSeen = Math.max(best.lastSeen, s.time);
       if (!best.country && s.country) best.country = s.country;
+      for (const k of articleKeys) if (!byArticle.has(k)) byArticle.set(k, best);
       continue;
     }
     const d: Draft = {
@@ -340,7 +366,8 @@ export function fuse(signals: Signal[]): Incident[] {
       stories: words.size ? [{ words, vague }] : [],
     };
     drafts.push(d);
-    if (human) {
+    for (const k of articleKeys) if (!byArticle.has(k)) byArticle.set(k, d);
+    if (human && s.country) {
       const k = `${family}|${s.country}`;
       const list = byCountry.get(k);
       if (list) list.push(d);

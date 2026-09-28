@@ -11,7 +11,7 @@ import {
   classifyText,
   domainOf,
 } from "../taxonomy";
-import { countryByIso3, stripDiacritics, type GazetteerData } from "../gazetteer";
+import { countryByIso3, geocodeText, stripDiacritics, type GazetteerData } from "../gazetteer";
 import {
   checkCoords,
   checkTime,
@@ -364,7 +364,26 @@ export function groupsToSignals(
     }
     const attention = Math.min(1, Math.log10(1 + g.articles) / 2);
     const geoName = lead.geoName.replace(/\s*\(general\)/gi, "");
-    const place = geoName.split(",")[0].trim() || geoName;
+    let geo: { lat: number; lon: number; precision: GeoPrecision; place: string; country?: string } = {
+      lat: lead.lat,
+      lon: lead.lon,
+      precision,
+      place: geoName,
+      country: countryFromPlace(gaz, geoName),
+    };
+    // Country-level fixes are GDELT's weakest geography (a strike in
+    // Rakhine State coded to Bangladesh). When the article's own headline
+    // names another country, or a city, the headline wins.
+    let relocated = false;
+    if (precision === "country" && headline) {
+      const hg = geocodeText(gaz, headline);
+      // A demonym alone ("Israeli army…") names an actor, not the place.
+      if (hg && !hg.weak && (hg.country !== geo.country || hg.precision !== "country")) {
+        geo = { lat: hg.lat, lon: hg.lon, precision: hg.precision, place: hg.place, country: hg.country };
+        relocated = true;
+      }
+    }
+    const place = geo.place.split(",")[0].trim() || geo.place;
     signals.push({
       key: `gdelt:${key}`,
       source: "gdelt",
@@ -373,18 +392,22 @@ export function groupsToSignals(
       headline,
       url: src.url,
       outlet: src.outlet,
-      lat: lead.lat,
-      lon: lead.lon,
-      precision,
-      place: geoName,
-      country: countryFromPlace(gaz, geoName),
+      lat: geo.lat,
+      lon: geo.lon,
+      precision: geo.precision,
+      place: geo.place,
+      country: geo.country,
       time,
       firstTime: first,
-      severity: clamp01(severity * (0.75 + 0.25 * attention) * (precision === "country" ? 0.85 : 1)),
+      severity: clamp01(severity * (0.75 + 0.25 * attention) * (geo.precision === "country" ? 0.85 : 1)),
       quality: clamp01(0.2 + 0.15 * Math.log2(1 + g.outlets.size) + 0.1 * Math.log10(1 + g.articles)),
       reports: g.articles,
       actors: topActors(g.rows),
-      tags: [`cameo:${lead.code}`, ...(g.outlets.size > 1 ? ["multi-outlet"] : ["single-outlet"])],
+      tags: [
+        `cameo:${lead.code}`,
+        ...(g.outlets.size > 1 ? ["multi-outlet"] : ["single-outlet"]),
+        ...(relocated ? ["located-by-headline"] : []),
+      ],
       metrics: {
         articles: g.articles,
         outlets: g.outlets.size,

@@ -13,6 +13,17 @@ describe("headline geocoder", () => {
     const m = geocodeText(gaz, "Israeli strikes on Gaza kill 23");
     expect(m?.country).toBe("PS");
   });
+  it("reads possessives with a typographic apostrophe", () => {
+    // Newsrooms publish "Kyiv’s"; the demonym "Russian" must not win.
+    expect(geocodeText(gaz, "Russian strike on Kyiv’s science academy kills at least one")).toMatchObject({
+      precision: "city",
+      country: "UA",
+    });
+  });
+  it("flags demonym-only matches as weak", () => {
+    expect(geocodeText(gaz, "Israeli army set off large explosion in south, report says")).toMatchObject({ country: "IL", weak: true });
+    expect(geocodeText(gaz, "Floods displace thousands in Bangladesh")?.weak).toBeUndefined();
+  });
   it("falls back to country level", () => {
     expect(geocodeText(gaz, "Floods displace thousands in Bangladesh")).toMatchObject({ precision: "country", country: "BD" });
   });
