@@ -177,6 +177,14 @@ export function classifyText(text: string): { category: Category; score: number 
   return best ? { category: best, score: bestScore } : null;
 }
 
+/**
+ * Words a headline about violence almost always contains. Used to veto
+ * machine coding that labels court reports, sport or tax disputes as
+ * "assault" or "fight": a sanity check, not a classifier.
+ */
+export const VIOLENCE_VOCAB =
+  /\b(kill\w*|dead|deaths?|died|dies|wounded|injur\w*|casualt\w*|attack\w*|strikes?|struck|bomb\w*|blasts?|explo\w*|shell\w*|missiles?|rockets?|drones?|artillery|gunfire|gunm[ae]n|shoot\w*|shot|stabb\w*|fight\w*|clash\w*|battles?|troops?|soldiers?|army|military|militants?|forces|raid\w*|ambush\w*|siege|offensive|invasion|front ?line|war|warfare|airstrikes?|hostages?|kidnap\w*|abduct\w*|assassinat\w*|massacre|murder\w*|homicide|violen\w*|terror\w*|insurgen\w*|rebels?|jihadis\w*|coup|riot\w*|arrest\w*|detain\w*|crackdown|executed|execution|torture\w*|weapons?|guns?|firearms?|armed)\b/i;
+
 /** Baseline severity for a headline classified into a category. */
 export const TEXT_SEVERITY: Record<Category, number> = {
   conflict: 0.72,

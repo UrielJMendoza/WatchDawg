@@ -469,7 +469,7 @@ const HEADLINES: Array<[string, number]> = [
 
 function wireFeed(url: string, now: number): string {
   const epoch = epochOf(now);
-  const which = Math.max(0, WIRE_FEEDS.findIndex((f) => f.url === url)) % 3;
+  const which = Math.max(0, WIRE_FEEDS.findIndex((f) => f.urls.includes(url))) % 3;
   const r = mulberry32(seedOf(`wire:${which}:${epoch}`));
   const items = HEADLINES.filter((_, i) => (i + which) % 3 !== 2 || r() > 0.5).map(([title, hoursAgo]) => {
     const t = epoch - (hoursAgo + which * 0.4) * HOUR;
@@ -536,7 +536,7 @@ export function fixtureTransport(now: number): Transport {
     if (url === EONET_URL) return eonetPayload(now);
     if (url.startsWith(`${GDACS_API}/SEARCH`)) return gdacsPayload(now);
     if (url.endsWith(GDELT_LASTUPDATE_PATH)) return gdeltManifest(now);
-    if (WIRE_FEEDS.some((f) => f.url === url)) return wireFeed(url, now);
+    if (WIRE_FEEDS.some((f) => f.urls[0] === url)) return wireFeed(url, now);
     if (CITIES.some((c) => url.startsWith(c.url("").split("?")[0]))) return crimePayload(url, now);
     throw new Error(`fixture transport: nothing for ${url}`);
   };

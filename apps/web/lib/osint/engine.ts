@@ -50,7 +50,7 @@ async function request(url: string, timeoutMs: number, init?: Parameters<Transpo
 
 export const liveTransport: Transport = {
   async text(url, init) {
-    const text = await (await request(url, 15_000, init)).text();
+    const text = await (await request(url, init?.timeoutMs ?? 15_000, init)).text();
     if (text.length > MAX_BYTES) throw new Error("Payload too large");
     return text;
   },

@@ -109,7 +109,9 @@ export function parseGdacs(json: unknown, ctx: Pick<CollectContext, "now" | "hor
       ledger.reject(coordErr ?? "coord.missing");
       continue;
     }
-    const time = parseUtc(p.todate ?? p.datemodified ?? p.fromdate);
+    // todate can be a forecast horizon for cyclones; the last modification is
+    // when GDACS last observed the event.
+    const time = Math.min(parseUtc(p.datemodified ?? p.todate ?? p.fromdate), ctx.now);
     const timeErr = checkTime(time, ctx.now, Math.max(ctx.horizonMs, 30 * 86_400_000));
     if (timeErr) {
       if (timeErr === "window.stale") ledger.filter(timeErr);

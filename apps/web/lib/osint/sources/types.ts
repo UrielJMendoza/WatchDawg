@@ -5,7 +5,7 @@ import type { GazetteerData } from "../gazetteer";
 /** Byte/text fetcher. Production uses the network; tests inject recorded or
  * synthesised upstream payloads so the same parsers run offline. */
 export interface Transport {
-  text(url: string, init?: { headers?: Record<string, string>; method?: string; body?: string }): Promise<string>;
+  text(url: string, init?: { headers?: Record<string, string>; method?: string; body?: string; timeoutMs?: number }): Promise<string>;
   bytes(url: string): Promise<Uint8Array>;
 }
 

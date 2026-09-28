@@ -35,5 +35,6 @@ describe("validation primitives", () => {
       "Russian drone strike hits Kharkiv apartment block",
     );
     expect(headlineFromUrl("https://x.com/article/123456789")).toBeUndefined();
+    expect(headlineFromUrl("https://x.com/world/britain-s-gaza-secrets-exposed-by-un-report")).toBe("Britain's gaza secrets exposed by UN report");
   });
 });

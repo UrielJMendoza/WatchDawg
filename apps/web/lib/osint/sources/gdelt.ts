@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { unzipSync } from "fflate";
 import type { Category, GeoPrecision, Signal } from "../types";
-import { CAMEO_ROOTS_KEPT, cameo } from "../taxonomy";
+import { CAMEO_ROOTS_KEPT, VIOLENCE_VOCAB, cameo, domainOf } from "../taxonomy";
 import { countryByIso3, stripDiacritics, type GazetteerData } from "../gazetteer";
 import {
   checkCoords,
@@ -303,21 +303,36 @@ export function groupsToSignals(
       toneSum += r.tone * r.articles;
       severity = Math.max(severity, r.severity);
     }
+    // Cross-validate violent coding against the article's own words. CAMEO
+    // assigns "assault" to court reporting and "fight" to sports and tax
+    // disputes; a headline with no violent vocabulary vetoes the coding.
+    const headline = headlineFromUrl(lead.url, [lead.geoName, ...topActors(g.rows)]);
+    if (domainOf(lead.category) === "security") {
+      if (headline && !VIOLENCE_VOCAB.test(headline)) {
+        ledger.filter("relevance.headline_mismatch");
+        continue;
+      }
+      if (!headline && g.outlets.size < 2) {
+        ledger.filter("evidence.unverifiable");
+        continue;
+      }
+    }
     const attention = Math.min(1, Math.log10(1 + g.articles) / 2);
-    const place = lead.geoName.split(",")[0].trim() || lead.geoName;
+    const geoName = lead.geoName.replace(/\s*\(general\)/gi, "");
+    const place = geoName.split(",")[0].trim() || geoName;
     signals.push({
       key: `gdelt:${key}`,
       source: "gdelt",
       category: lead.category,
       title: `${lead.label} — ${place}`,
-      headline: headlineFromUrl(lead.url, [lead.geoName, ...topActors(g.rows)]),
+      headline,
       url: lead.url,
       outlet: lead.outlet,
       lat: lead.lat,
       lon: lead.lon,
       precision,
-      place: lead.geoName,
-      country: countryFromPlace(gaz, lead.geoName),
+      place: geoName,
+      country: countryFromPlace(gaz, geoName),
       time,
       firstTime: first,
       severity: clamp01(severity * (0.75 + 0.25 * attention) * (precision === "country" ? 0.85 : 1)),

@@ -11,22 +11,23 @@ import type { CollectContext, CollectResult, SourceAdapter } from "./types";
  * the human-written counterpart to GDELT's machine coding: when both put the
  * same kind of event in the same place, the incident is corroborated.
  */
-export const WIRE_FEEDS: Array<{ outlet: string; url: string }> = [
-  { outlet: "BBC News", url: "https://feeds.bbci.co.uk/news/world/rss.xml" },
-  { outlet: "Al Jazeera", url: "https://www.aljazeera.com/xml/rss/all.xml" },
-  { outlet: "The Guardian", url: "https://www.theguardian.com/world/rss" },
-  { outlet: "The New York Times", url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml" },
-  { outlet: "France 24", url: "https://www.france24.com/en/rss" },
-  { outlet: "Deutsche Welle", url: "https://rss.dw.com/rdf/rss-en-world" },
-  { outlet: "UN News", url: "https://news.un.org/feed/subscribe/en/news/all/rss.xml" },
-  { outlet: "NPR", url: "https://feeds.npr.org/1004/rss.xml" },
-  { outlet: "Sky News", url: "https://feeds.skynews.com/feeds/rss/world.xml" },
-  { outlet: "CBC News", url: "https://www.cbc.ca/webfeed/rss/rss-world" },
-  { outlet: "The Kyiv Independent", url: "https://kyivindependent.com/rss/" },
-  { outlet: "The Times of Israel", url: "https://www.timesofisrael.com/feed/" },
-  { outlet: "Africanews", url: "https://www.africanews.com/feed/rss" },
-  { outlet: "Middle East Eye", url: "https://www.middleeasteye.net/rss" },
-  { outlet: "NPR (US news)", url: "https://feeds.npr.org/1003/rss.xml" },
+/** Each outlet lists candidate feed URLs, tried in order. */
+export const WIRE_FEEDS: Array<{ outlet: string; urls: string[] }> = [
+  { outlet: "BBC News", urls: ["https://feeds.bbci.co.uk/news/world/rss.xml"] },
+  { outlet: "Al Jazeera", urls: ["https://www.aljazeera.com/xml/rss/all.xml"] },
+  { outlet: "The Guardian", urls: ["https://www.theguardian.com/world/rss"] },
+  { outlet: "The New York Times", urls: ["https://rss.nytimes.com/services/xml/rss/nyt/World.xml"] },
+  { outlet: "France 24", urls: ["https://www.france24.com/en/rss"] },
+  { outlet: "Deutsche Welle", urls: ["https://rss.dw.com/rdf/rss-en-world"] },
+  { outlet: "UN News", urls: ["https://news.un.org/feed/subscribe/en/news/all/rss.xml"] },
+  { outlet: "NPR", urls: ["https://feeds.npr.org/1004/rss.xml"] },
+  { outlet: "Sky News", urls: ["https://feeds.skynews.com/feeds/rss/world.xml"] },
+  { outlet: "CBC News", urls: ["https://rss.cbc.ca/lineup/world.xml", "https://www.cbc.ca/webfeed/rss/rss-world"] },
+  { outlet: "The Kyiv Independent", urls: ["https://kyivindependent.com/news-archive/rss/", "https://kyivindependent.com/feed/"] },
+  { outlet: "The Jerusalem Post", urls: ["https://www.jpost.com/rss/rssfeedsheadlines.aspx", "https://www.timesofisrael.com/feed/"] },
+  { outlet: "Africanews", urls: ["https://www.africanews.com/feed/rss"] },
+  { outlet: "Middle East Eye", urls: ["https://www.middleeasteye.net/rss"] },
+  { outlet: "NPR (US news)", urls: ["https://feeds.npr.org/1003/rss.xml"] },
 ];
 
 const MAX_AGE_MS = 48 * 3_600_000;
@@ -173,7 +174,7 @@ export const wire: SourceAdapter = {
     kind: "Editorial newsrooms (RSS)",
     reliability: "B",
     homepage: "https://www.bbc.com/news/world",
-    description: "Headlines from 15 newsrooms (BBC, Al Jazeera, NYT, Guardian, France 24, DW, UN News, NPR, Sky, CBC, Kyiv Independent, Times of Israel, Africanews, Middle East Eye) — classified and geocoded.",
+    description: "Headlines from 15 newsrooms (BBC, Al Jazeera, NYT, Guardian, France 24, DW, UN News, NPR, Sky, CBC, Kyiv Independent, Jerusalem Post, Africanews, Middle East Eye) — classified and geocoded.",
     ttlMs: 4 * 60_000,
     maxStaleMs: 6 * 3_600_000,
     coverage: "Past 48 hours · polled every 4 minutes",
@@ -182,9 +183,18 @@ export const wire: SourceAdapter = {
     const ledger = new Ledger();
     const seen = new Set<string>();
     const feeds = WIRE_FEEDS;
-    const results = await Promise.allSettled(
-      feeds.map(async (f) => ({ f, items: parseFeedXml(await ctx.transport.text(f.url)) })),
-    );
+    const fetchFeed = async (f: (typeof feeds)[number]) => {
+      let last: unknown;
+      for (const url of f.urls) {
+        try {
+          return { f, items: parseFeedXml(await ctx.transport.text(url, { timeoutMs: 8_000 })) };
+        } catch (err) {
+          last = err;
+        }
+      }
+      throw last instanceof Error ? last : new Error("unreachable");
+    };
+    const results = await Promise.allSettled(feeds.map(fetchFeed));
     const signals: Signal[] = [];
     const failed: string[] = [];
     let ok = 0;
