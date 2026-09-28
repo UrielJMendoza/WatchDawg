@@ -599,7 +599,13 @@ function Feed({ incidents, now, onSelect, freshIds }: Props) {
   const items = useMemo(() => {
     const t = FEED_TABS.find((x) => x.id === tab)!;
     const list = incidents.filter(t.test);
-    list.sort((a, b) => (sort === "latest" ? b.lastSeen - a.lastSeen : b.severity * (0.4 + 0.6 * b.confidence) - a.severity * (0.4 + 0.6 * a.confidence)));
+    // "Latest" means newest stories: ongoing ones are re-reported every few
+    // minutes, so ordering by last sighting would pin old news to the top.
+    list.sort((a, b) =>
+      sort === "latest"
+        ? b.firstSeen - a.firstSeen
+        : b.severity * (0.4 + 0.6 * b.confidence) - a.severity * (0.4 + 0.6 * a.confidence),
+    );
     return list.slice(0, 150);
   }, [incidents, tab, sort]);
   return (
@@ -661,7 +667,12 @@ function IncidentList({ items, now, onSelect, freshIds, rich }: { items: Inciden
             <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
               <span>{CATEGORIES[i.category].label}</span>
               <span>·</span>
-              <span>{ago(i.lastSeen, now)}</span>
+              <span title={`First reported ${ago(i.firstSeen, now)}, last reported ${ago(i.lastSeen, now)}`}>
+                {ago(i.firstSeen, now)}
+              </span>
+              {i.lastSeen - i.firstSeen > 3_600_000 && now - i.lastSeen < 3_600_000 && (
+                <span className="text-foreground/70">· updated</span>
+              )}
               {freshIds?.has(i.id) && <span className="text-primary">new</span>}
               <GradeBadge reliability={i.reliability} credibility={i.credibility} className="ml-auto h-4 text-[9px]" />
             </div>

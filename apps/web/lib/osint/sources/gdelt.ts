@@ -186,7 +186,9 @@ export function parseExport(tsv: string, now: number, horizonMs: number): { rows
       continue;
     }
     rows.push({
-      time,
+      // DATEADDED stamps the end of the 15-minute window, which can be
+      // minutes ahead of the fetch; nothing is reported from the future.
+      time: Math.min(time, now),
       code: c[26],
       category: meta.category,
       label: meta.label,
@@ -331,14 +333,17 @@ export function groupsToSignals(
     }
     let category = lead.category;
     let label = lead.label;
+    // Every GDELT event needs the article's own words to check the coding
+    // against. Without a headline it is "Threat — Ashdown Forest": one
+    // outlet, nothing to verify, nothing to read.
+    if (!headline) {
+      ledger.filter("evidence.unverifiable");
+      continue;
+    }
     if (domainOf(lead.category) === "security") {
       // Violence needs the article's own words to agree: GDELT codes
       // "military force" for capitals standing in for governments, and
       // "kill" for film titles.
-      if (!headline) {
-        ledger.filter("evidence.unverifiable");
-        continue;
-      }
       const cls = classifyText(headline);
       if (
         !VIOLENCE_VOCAB.test(headline) ||
@@ -361,7 +366,7 @@ export function groupsToSignals(
         category = "crime";
         label = "Crime report";
       }
-    } else if (headline) {
+    } else {
       // Civil coding gets the same cross-check: GDELT filed a coffee chain
       // closing stores as "tension" and a legal essay as "protest".
       const cls = classifyText(headline);
