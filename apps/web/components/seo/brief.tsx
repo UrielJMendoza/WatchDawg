@@ -4,6 +4,7 @@ import { CATEGORIES } from "@/lib/osint/taxonomy";
 import { countryByIso2 } from "@/lib/osint/gazetteer";
 import { gazetteer } from "@/lib/osint/engine";
 import { countrySlug } from "@/lib/site";
+import { TopicNav } from "./site-header";
 
 /**
  * Server-rendered situation brief: the same live data the globe shows, as
@@ -79,7 +80,11 @@ export function SituationBrief({ snap, heading, incidents }: { snap: Snapshot | 
           })}
         </ul>
       )}
-      <p className="mt-10 text-xs text-muted-foreground">
+      <div className="mt-10 space-y-2">
+        <h2 className="section-header">Live maps</h2>
+        <TopicNav />
+      </div>
+      <p className="mt-6 text-xs text-muted-foreground">
         Data: USGS, NASA EONET, GDACS, GDELT, ACLED, San Francisco &amp; Chicago police open data and international newsrooms. See the{" "}
         <Link href="/methodology">methodology</Link> for how sources are validated, fused and graded.
       </p>

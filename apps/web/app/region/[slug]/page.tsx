@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, permanentRedirect } from "next/navigation";
 import { countryByIso2 } from "@/lib/osint/gazetteer";
 import { gazetteer, getSnapshot } from "@/lib/osint/engine";
 import { CATEGORIES } from "@/lib/osint/taxonomy";
 import { SituationBrief } from "@/components/seo/brief";
-import { Logo } from "@/components/console/top-bar";
+import { SiteHeader } from "@/components/seo/site-header";
 import { SITE_NAME, countrySlug, iso2FromSlug, siteUrl } from "@/lib/site";
 
 // Reads live data on every request (the engine memoises upstream pulls).
@@ -58,23 +57,7 @@ export default async function RegionPage({ params }: { params: Params }) {
   return (
     <div className="min-h-screen">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
-      <header className="border-b border-border bg-surface/80">
-        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
-          <Link href="/" className="flex items-center gap-2">
-            <Logo className="h-6 w-6" />
-            <span className="font-mono text-xs font-bold tracking-[0.28em]">WATCHDAWG</span>
-          </Link>
-          <nav aria-label="Breadcrumb" className="text-xs text-muted-foreground">
-            / <span className="text-foreground">{c.name}</span>
-          </nav>
-          <Link
-            href={`/?sel=c:${c.iso2}&cc=${c.iso2}&w=7d`}
-            className="ml-auto rounded-sm border border-primary/50 px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider text-primary hover:bg-primary/10"
-          >
-            Open on the globe
-          </Link>
-        </div>
-      </header>
+      <SiteHeader crumb={c.name} cta={{ href: `/?sel=c:${c.iso2}&cc=${c.iso2}&w=7d`, label: "Open on the globe" }} />
       <div className="mx-auto max-w-5xl px-4 pt-8">
         <p className="section-header">
           {c.subregion || c.region}

@@ -10,6 +10,7 @@ import { satState } from "@/lib/console/orbits";
 import { countryAnchor, relationFeatures } from "@/lib/console/links";
 import { useWatchlist } from "@/lib/console/watchlist";
 import { AlertsButton } from "./alerts";
+import { ShortcutsHelp } from "./shortcuts";
 import { DOMAINS, DOMAIN_ORDER, CATEGORIES } from "@/lib/osint/taxonomy";
 import { countryByIso2, type GazetteerData } from "@/lib/osint/gazetteer";
 import { hasFilters, matchesFilters, parseQuery } from "@/lib/osint/query";
@@ -87,6 +88,7 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
   const [basemap, setBasemap] = useState<Basemap>("dark");
   const [tab, setTab] = useState<RailTab>("filters");
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [camera, setCamera] = useState<CameraCommand | null>(null);
   const [hover, setHover] = useState<HoverTarget | null>(null);
   const [cursor, setCursor] = useState<{ lat: number; lon: number } | null>(null);
@@ -246,20 +248,44 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
     }
   };
 
-  // Keyboard: ⌘K / Ctrl+K / "/" search, Esc to clear selection.
+  // Keyboard: see components/console/shortcuts.tsx for the map.
   useEffect(() => {
+    const WINDOW_KEYS: Record<string, WindowKey> = { "1": "1h", "2": "6h", "3": "24h", "4": "7d", "5": "30d" };
+    const TAB_KEYS: Record<string, RailTab> = { f: "filters", h: "hotspots", s: "stats", d: "sources" };
     const onKey = (e: KeyboardEvent) => {
-      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement)?.tagName ?? "");
-      if ((e.key === "k" && (e.metaKey || e.ctrlKey)) || (e.key === "/" && !typing)) {
+      const el = e.target as HTMLElement | null;
+      const typing = !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setPaletteOpen(true);
-      } else if (e.key === "Escape" && !paletteOpen) {
-        setSelection(null);
+        return;
       }
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "Escape") {
+        if (helpOpen) setHelpOpen(false);
+        else if (!paletteOpen) setSelection(null);
+        return;
+      }
+      if (paletteOpen || helpOpen) {
+        if (e.key === "?") setHelpOpen(false);
+        return;
+      }
+      const k = e.key.toLowerCase();
+      if (e.key === "/") {
+        e.preventDefault();
+        setPaletteOpen(true);
+      } else if (e.key === "?") setHelpOpen(true);
+      else if (WINDOW_KEYS[e.key]) setWindow(WINDOW_KEYS[e.key]);
+      else if (TAB_KEYS[k]) {
+        setTab(TAB_KEYS[k]);
+        setMobilePanel("rail");
+      } else if (k === "b") setBasemap((b) => (b === "dark" ? "imagery" : "dark"));
+      else if (k === "t") setLayers((l) => ({ ...l, air: !(l.air || l.sats), sats: !(l.air || l.sats) }));
+      else if (k === "r") setCamera({ key: Date.now(), reset: true });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [paletteOpen]);
+  }, [paletteOpen, helpOpen]);
 
   const hovered = hover?.kind === "incident" ? byId.get(hover.id) : undefined;
   const hoveredAir = hover?.kind === "air" ? aircraft.find((a) => a.id === hover.id) : undefined;
@@ -499,6 +525,9 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
           <div>
             Z {view.zoom.toFixed(1)} · ALT {compact(Math.round(altitudeKm(view.zoom, view.lat)))} km · BRG {Math.round(view.bearing)}°
           </div>
+          <div className="text-muted-foreground/70">
+            press <kbd className="kbd">?</kbd> for shortcuts
+          </div>
         </div>
         <div className="panel pointer-events-none absolute bottom-[132px] right-[404px] z-20 hidden rounded-sm px-2.5 py-1.5 lg:block">
           <div className="flex items-center gap-3">
@@ -541,6 +570,7 @@ export default function CommandCenter({ initial }: { initial: Snapshot | null })
         )}
       </div>
 
+      <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
       <SearchPalette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
