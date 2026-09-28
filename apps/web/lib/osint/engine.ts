@@ -31,6 +31,11 @@ export const ADAPTERS: SourceAdapter[] = [usgs, gdacs, nws, eonet, acled, gdelt,
 const HORIZON_MS = WINDOWS["30d"];
 const PULL_TIMEOUT_MS = 25_000;
 const SNAPSHOT_TTL_MS = 20_000;
+/** A cold server waits at most this long for a source's first pull. */
+const COLD_START_BUDGET_MS = 6_000;
+/** While a source is still connecting, rebuild snapshots sooner so it joins quickly. */
+const CONNECTING_TTL_MS = 3_000;
+const CONNECTING = "Connecting — first pull in progress";
 const MAX_INCIDENTS = 3000;
 const UA = "WatchDawg/1.0 (+https://github.com/UrielJMendoza/WatchDawg; OSINT situational awareness)";
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -125,6 +130,9 @@ function healthOf(adapter: SourceAdapter, st: PullState, now: number, disabled: 
     } else {
       statusNote = r.integrity?.detail;
     }
+  } else if (!disabled && st.inflight && !st.lastError) {
+    status = "degraded";
+    statusNote = CONNECTING;
   } else if (!disabled && !st.lastAttempt) {
     statusNote = "Not yet pulled";
   }
@@ -159,10 +167,11 @@ export interface Engine {
 
 export function createEngine(
   transport: Transport,
-  opts: { adapters?: SourceAdapter[]; clock?: () => number } = {},
+  opts: { adapters?: SourceAdapter[]; clock?: () => number; coldStartMs?: number } = {},
 ): Engine {
   const adapters = opts.adapters ?? ADAPTERS;
   const clock = opts.clock ?? Date.now;
+  const coldStartMs = opts.coldStartMs ?? COLD_START_BUDGET_MS;
   const state = new Map<string, PullState>();
   const snapshots = new Map<WindowKey, { at: number; snap: Promise<Snapshot> }>();
 
@@ -200,9 +209,14 @@ export function createEngine(
         });
     }
     // Stale-while-revalidate: once a source has data, a refresh never holds
-    // up the snapshot; only the very first pull is awaited.
-    if (!st.result) await st.inflight;
-    else if (st.inflight) keepAlive(st.inflight);
+    // up the snapshot. The first pull is awaited, but only for so long: one
+    // slow upstream must not keep a cold page blank.
+    if (!st.result && st.inflight) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([st.inflight, new Promise<void>((r) => (timer = setTimeout(r, coldStartMs)))]);
+      clearTimeout(timer);
+    }
+    if (st.inflight) keepAlive(st.inflight);
     return st;
   }
 
@@ -257,8 +271,14 @@ export function createEngine(
       const now = clock();
       if (hit && now - hit.at < SNAPSHOT_TTL_MS) return hit.snap;
       const snap = build(window);
-      snapshots.set(window, { at: now, snap });
-      snap.catch(() => snapshots.delete(window));
+      const entry = { at: now, snap };
+      snapshots.set(window, entry);
+      snap.then(
+        (s) => {
+          if (s.sources.some((h) => h.statusNote === CONNECTING)) entry.at = now - SNAPSHOT_TTL_MS + CONNECTING_TTL_MS;
+        },
+        () => snapshots.delete(window),
+      );
       return snap;
     },
   };

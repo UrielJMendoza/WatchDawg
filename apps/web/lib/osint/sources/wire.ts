@@ -22,7 +22,8 @@ export const WIRE_FEEDS: Array<{ outlet: string; urls: string[] }> = [
   { outlet: "UN News", urls: ["https://news.un.org/feed/subscribe/en/news/all/rss.xml"] },
   { outlet: "NPR", urls: ["https://feeds.npr.org/1004/rss.xml"] },
   { outlet: "Sky News", urls: ["https://feeds.skynews.com/feeds/rss/world.xml"] },
-  { outlet: "CBC News", urls: ["https://rss.cbc.ca/lineup/world.xml", "https://www.cbc.ca/webfeed/rss/rss-world"] },
+  // CBC's feeds time out from cloud regions; The Independent answers.
+  { outlet: "The Independent", urls: ["https://www.independent.co.uk/news/world/rss"] },
   { outlet: "The Kyiv Independent", urls: ["https://kyivindependent.com/news-archive/rss/", "https://kyivindependent.com/feed/"] },
   { outlet: "The Jerusalem Post", urls: ["https://www.jpost.com/rss/rssfeedsheadlines.aspx", "https://www.timesofisrael.com/feed/"] },
   { outlet: "Africanews", urls: ["https://www.africanews.com/feed/rss"] },
@@ -178,7 +179,7 @@ export const wire: SourceAdapter = {
     kind: "Editorial newsrooms (RSS)",
     reliability: "B",
     homepage: "https://www.bbc.com/news/world",
-    description: "Headlines from 15 newsrooms (BBC, Al Jazeera, NYT, Guardian, France 24, DW, UN News, NPR, Sky, CBC, Kyiv Independent, Jerusalem Post, Africanews, Middle East Eye) — classified and geocoded.",
+    description: "Headlines from 15 newsrooms (BBC, Al Jazeera, NYT, Guardian, France 24, DW, UN News, NPR, Sky, The Independent, Kyiv Independent, Jerusalem Post, Africanews, Middle East Eye) — classified and geocoded.",
     ttlMs: 4 * 60_000,
     maxStaleMs: 6 * 3_600_000,
     coverage: "Past 48 hours · polled every 4 minutes",

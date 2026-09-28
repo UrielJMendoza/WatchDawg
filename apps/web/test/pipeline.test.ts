@@ -163,6 +163,33 @@ describe("pipeline on fixture upstreams", () => {
     release();
   });
 
+  it("does not let one slow first pull hold a cold page", async () => {
+    const base = fixtureTransport(NOW);
+    let t = NOW;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const slow: Transport = {
+      async text(url, init) {
+        if (url.includes("earthquake.usgs.gov")) await gate;
+        return base.text(url, init);
+      },
+      bytes: base.bytes,
+    };
+    const engine = createEngine(slow, { clock: () => t, coldStartMs: 50 });
+    const cold = await engine.getSnapshot("24h");
+    const u = cold.sources.find((s) => s.id === "usgs")!;
+    expect(u.status).toBe("degraded");
+    expect(u.statusNote).toMatch(/Connecting/);
+    expect(cold.sources.find((s) => s.id === "gdacs")!.status).toBe("ok");
+
+    release();
+    await new Promise((r) => setTimeout(r, 20));
+    t = NOW + 4_000; // past the short connecting TTL, inside the normal one
+    const warm = await engine.getSnapshot("24h");
+    expect(warm.sources.find((s) => s.id === "usgs")!.status).toBe("ok");
+    expect(warm.incidents.some((i) => i.sources.includes("usgs"))).toBe(true);
+  });
+
   it("marks a source offline when its upstream fails and nothing is cached", async () => {
     const base = fixtureTransport(NOW);
     const broken: Transport = {
