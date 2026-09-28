@@ -1,124 +1,76 @@
 # WatchDawg
 
-[![Status: Phase 1 of 7](https://img.shields.io/badge/status-phase%201%20of%207-amber)](https://github.com/jeramiahmm/watchdawg)
-[![Classification](https://img.shields.io/badge/UNCLASSIFIED-%2F%2F%20OSINT-2EA043)](#classification)
+**A live 3D globe of what is happening in the world right now** — wars and armed conflict, terrorism, crime, protests, earthquakes, storms, wildfires and floods — fused from validated open sources and graded for confidence, in a Gotham-style analyst console.
 
-Real-time OSINT maritime-security situational awareness for the Red Sea and Horn of Africa.
+> `UNCLASSIFIED // OSINT` — a portfolio project demonstrating OSINT methodology. Not affiliated with any government, and not a substitute for an analyst.
 
-> **Classification:** `UNCLASSIFIED // OSINT`
->
-> This is a portfolio project demonstrating OSINT methodology. It is not classified, not affiliated with any government, and not a substitute for an analyst.
+**No simulated data, ever.** Everything on the globe comes from a live upstream. If a source is unreachable, its data simply isn't shown and the Sources panel says why.
 
-## Current phase: 1 of 7
+## What it does
 
-Phase 1 builds the skeleton end-to-end: an empty Gotham-styled dark map, login screen, and a deployed FastAPI backend on Cloud Run. No data ingestion yet. Subsequent phases add ingestion (2), interaction surface (3), entity ontology (4), analytics + ML (5), multi-user (6), and polish (7).
+- **3D globe** (MapLibre GL v5 globe projection) with atmosphere, clustered incidents, activity heat, pulsing rings for the last 90 minutes, hotspot zones and labels. Dark vector basemap (CARTO) or satellite imagery (Esri), with a self-hosted Natural Earth fallback so the globe always renders.
+- **Live sources**
+  | Source | What | Grade |
+  |---|---|---|
+  | USGS | M2.5+ earthquakes, PAGER alerts, review status | A |
+  | GDACS (UN/EC) | Cyclones, floods, quakes, volcanoes, drought, fire with Green/Orange/Red alerts | A |
+  | NASA EONET | Open natural events from satellite and agency feeds | A |
+  | ACLED *(API key)* | Battles, explosions, violence against civilians, riots, protests | A |
+  | City police open data | Serious crime reports, San Francisco + Chicago (block-level; sex offences and domestic incidents excluded) | A |
+  | 15 newsrooms (RSS) | BBC, Al Jazeera, NYT, Guardian, France 24, DW, UN News, NPR, Sky, CBC, Kyiv Independent, Times of Israel, Africanews, Middle East Eye — classified and geocoded | B |
+  | GDELT 2.0 | Machine-coded conflict/unrest/diplomacy events from world news, every 15 minutes | C |
+- **Live tracks** — military-flagged aircraft and emergency squawks (7500/7600/7700) from ADS-B networks (adsb.lol, airplanes.live), refreshed every 15 s; satellites (stations, military, Earth observation, weather) from checksum-validated CelesTrak element sets, propagated live in the browser with SGP4 and drawn with ground tracks.
+- **Validation** — integrity (GDELT MD5 vs manifest), strict schemas (zod), coordinate/time/URL range checks, relevance and evidence thresholds, privacy filters. Every dropped record is counted by reason in the **Sources** panel.
+- **Fusion** — observations of the same event close in space and time merge into one incident. Confidence is a noisy-OR over *independent* sources; each incident carries a NATO **Admiralty grade** (e.g. `A1`, `B2`, `C3`).
+- **Aggregation** — hotspots ranked by activity index (severity × confidence), with trend and sparkline.
+- **Search** — ⌘K palette with fuzzy search over incidents, places (≈2,800 countries and cities) and hotspots, plus an analyst query language: `cat:conflict sev>0.7 src:gdelt country:UA multi fatal precise "quoted phrase"`. Apply any query as a globe filter.
+- **Filter by statistics** — every bar and tile in the **Stats** panel is a filter (type, country, severity band, source, corroboration, fatalities). Time windows: 1h · 6h · 24h · 7d · 30d.
+- **SEO** — server-rendered situation brief, per-country pages (`/region/ukraine-ua`), methodology page, JSON-LD (WebApplication, Dataset, CollectionPage), sitemap, robots, Open Graph image, canonical URLs, shareable deep links (`/?sel=i:<id>`, `/?q=cat:unrest`).
 
-## Architecture
-
-```
-                           +----------------------+
-                           |   GitHub Actions     |
-                           |   (15-min cron)      |
-                           +-----------+----------+
-                                       |
-                                       v
-+------------+      +------------------+-------------------+
-|  Vercel    |<---->|        Cloud Run (us-central1)       |
-|  Next.js   | HTTP |        FastAPI + Pydantic v2          |
-|  MapLibre  |      |        watchdawg-api service          |
-|  Deck.gl   |      +------------------+-------------------+
-+-----+------+                         |
-      |                                v
-      |                         +------+-------+
-      +------------------------>|   Supabase   |
-            Supabase Auth /     | Postgres +   |
-            anon-key reads      | PostGIS +    |
-                                | Auth + RLS   |
-                                +--------------+
-```
-
-## Tech stack (locked)
-
-- **Frontend:** Next.js 15 (App Router) + TypeScript + Tailwind + shadcn/ui + MapLibre GL + Deck.gl + Recharts + uPlot
-- **Backend:** Python 3.12 + FastAPI + Pydantic v2 + httpx + structlog
-- **Database + Auth:** Supabase (Postgres + PostGIS + Auth + RLS)
-- **Scheduling:** GitHub Actions cron (no APScheduler)
-- **Deploy:** Vercel (web) + Google Cloud Run (api) + Supabase free tier
-- **Cost target:** $0/month
-
-## Repo layout
+## Layout
 
 ```
-watchdawg/
-├── apps/
-│   ├── web/              Next.js 15 frontend (Vercel)
-│   └── api/              FastAPI backend (Cloud Run)
-├── infra/
-│   └── supabase/
-│       └── migrations/   SQL migrations (apply in order)
-└── .github/
-    └── workflows/        Deploy + cron workflows
+apps/web/                       Next.js 15 app (the product)
+  app/                          routes: / · /region/[slug] · /methodology · /api/v1/{snapshot,sources}
+  components/console/           globe, panels, inspector, timeline, search palette
+  lib/osint/                    ingestion engine, source adapters, validation, fusion, aggregation, search
+  lib/osint/data/gazetteer.json countries + cities (generated by scripts/build-geo.mjs)
+  test/                         pipeline tests; fixtures exercise every validator offline
+apps/api/                       FastAPI service (earlier phase; not required by the web app)
 ```
 
-## Local development
+## API
 
-### Prerequisites
+- `GET /api/v1/snapshot?window=24h` — incidents, hotspots, timeline, stats and per-source health (`1h | 6h | 24h | 7d | 30d`). Edge-cached for 30 s.
+- `GET /api/v1/sources` — validation ledger and status per source.
+- `GET /api/v1/tracks/air` — military and emergency-squawk aircraft (edge-cached 15 s).
+- `GET /api/v1/tracks/space` — validated orbital element sets (edge-cached 30 min).
 
-- Node.js 20+ and pnpm 9+
-- Python 3.12 + pip
-- Docker (optional, for local API)
-- A Supabase project (free tier)
-- API keys for: Anthropic, AISStream.io, NewsData.io, OpenSky, Reddit (Phase 2 onward)
-
-### Frontend
+## Run it
 
 ```bash
-cp apps/web/.env.example apps/web/.env.local
-# Fill in NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY,
-# NEXT_PUBLIC_API_BASE_URL (http://localhost:8000 for local).
 pnpm install
-pnpm dev
-# -> http://localhost:3000
+cp apps/web/.env.example apps/web/.env.local   # all optional
+pnpm dev                                       # http://localhost:3000
 ```
-
-### Backend
 
 ```bash
-cd apps/api
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-cp .env.example .env
-# Fill in the variables.
-uvicorn watchdawg_api.main:app --reload --port 8000
-# -> http://localhost:8000/health
+cd apps/web
+pnpm test        # validators, geocoder, query language, full pipeline on fixtures
+pnpm typecheck
+pnpm build
+pnpm build:geo   # regenerate countries.geojson + gazetteer.json
 ```
 
-Or via Docker:
+Optional environment: `ACLED_USERNAME` / `ACLED_PASSWORD` (or `ACLED_ACCESS_TOKEN`) to enable ACLED; `SOCRATA_APP_TOKEN` for higher police-portal rate limits; `NEXT_PUBLIC_SITE_URL` for canonical URLs.
 
-```bash
-docker compose up --build
-```
+## Honest limitations
 
-## Phase 1 — manual setup (one-time)
-
-These steps require human action and are **not** automated:
-
-1. **Supabase** — create a free-tier project, choose a region near `us-central1` (e.g. `us-east-1`).
-   - Run `infra/supabase/migrations/0001_init.sql` in the SQL editor.
-   - Copy the project URL, anon key, and service-role key into the env files.
-2. **Vercel** — connect the GitHub repo. Set Root Directory to `apps/web`. Add env vars `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_API_BASE_URL`.
-3. **Google Cloud** — create a project, enable Cloud Run + Artifact Registry + Secret Manager, set up Workload Identity Federation for GitHub Actions, store secrets, then push to `main` to trigger the deploy workflow.
-4. **GitHub Actions** — set repo variables `GCP_PROJECT_ID`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA`, `API_BASE_URL`. After the first Cloud Run deploy, copy the service URL into Vercel env `NEXT_PUBLIC_API_BASE_URL`.
-
-Detailed steps live in `apps/api/README.md` and `apps/web/.env.example`.
-
-## What this tool is NOT
-
-- Not a targeting tool
-- Not a real-time predictive engine
-- Not classified, not affiliated with any government
-- Not a substitute for an analyst — it supports them
+- GDELT is noisy machine coding — graded C until corroborated.
+- ACLED releases weekly; its newest events are days old.
+- Police portals publish with a 1–8 day lag and cover two cities.
+- Reported fatality counts are as reported, unverified.
 
 ## License
 
-MIT (code). Data licenses per source.
+MIT (code). Data licences per source — see the methodology page.

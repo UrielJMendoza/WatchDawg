@@ -1,4 +1,4 @@
-name: Web — typecheck & build smoke test
+name: Web — typecheck, lint, test & build
 
 # Vercel handles the actual production deploy via its GitHub integration.
 # This workflow just verifies that the web app builds on every push so we
@@ -9,10 +9,13 @@ on:
     branches: [main]
     paths:
       - "apps/web/**"
+      - "pnpm-lock.yaml"
       - ".github/workflows/deploy-web.yml"
   pull_request:
     paths:
       - "apps/web/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy-web.yml"
   workflow_dispatch:
 
 jobs:
@@ -24,21 +27,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # pnpm version comes from "packageManager" in the root package.json;
+      # pinning it here too makes the action refuse to run.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
-          cache-dependency-path: apps/web/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install
         run: pnpm install --frozen-lockfile=false
 
       - name: Typecheck
         run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm exec next lint
+
+      - name: Test
+        run: pnpm test
 
       - name: Build
         env:
