@@ -598,9 +598,13 @@ const FEED_TABS: Array<{ id: FeedTab; label: string; test: (i: Incident) => bool
 function Feed({ incidents, now, onSelect, freshIds }: Props) {
   const [tab, setTab] = useState<FeedTab>("all");
   const [sort, setSort] = useState<"latest" | "severity">("latest");
-  const items = useMemo(() => {
+  const [showWeak, setShowWeak] = useState(false);
+  const { items, hidden } = useMemo(() => {
     const t = FEED_TABS.find((x) => x.id === tab)!;
-    const list = incidents.filter(t.test);
+    const all = incidents.filter(t.test);
+    // Newest-first would otherwise lead with single-source reports graded
+    // "improbable" (credibility 5); they stay on the globe and in search.
+    const list = sort === "latest" && !showWeak ? all.filter((i) => i.credibility < 5) : all;
     // "Latest" means newest stories: ongoing ones are re-reported every few
     // minutes, so ordering by last sighting would pin old news to the top.
     list.sort((a, b) =>
@@ -608,8 +612,8 @@ function Feed({ incidents, now, onSelect, freshIds }: Props) {
         ? b.firstSeen - a.firstSeen
         : b.severity * (0.4 + 0.6 * b.confidence) - a.severity * (0.4 + 0.6 * a.confidence),
     );
-    return list.slice(0, 150);
-  }, [incidents, tab, sort]);
+    return { items: list.slice(0, 150), hidden: all.length - list.length };
+  }, [incidents, tab, sort, showWeak]);
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="border-b border-border px-4 pt-3">
@@ -642,6 +646,18 @@ function Feed({ incidents, now, onSelect, freshIds }: Props) {
         </div>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        {(hidden > 0 || showWeak) && sort === "latest" && (
+          <button
+            type="button"
+            onClick={() => setShowWeak(!showWeak)}
+            className="mb-1 flex w-full items-center justify-between rounded-sm px-2.5 py-1.5 text-left font-mono text-[10px] text-muted-foreground hover:bg-surface-2/60 hover:text-foreground"
+          >
+            <span>
+              {showWeak ? "Including unconfirmed single-source reports" : `${hidden} unconfirmed single-source reports hidden`}
+            </span>
+            <span className="text-primary">{showWeak ? "Hide" : "Show"}</span>
+          </button>
+        )}
         {items.length === 0 ? (
           <p className="px-2 py-8 text-center text-xs text-muted-foreground">Nothing in this window yet.</p>
         ) : (

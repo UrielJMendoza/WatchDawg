@@ -38,6 +38,7 @@ describe("headline vocabulary", () => {
     // Rulings and clinical trials are not crime.
     expect(classifyText("Supreme Court ruling on school funding expected")?.score ?? 0).toBeLessThan(MIN_TEXT_SCORE);
     expect(classifyText("3 Egyptian Officials Convicted of Kidnapping Slain Italian Student")?.category).toBe("crime");
+    expect(classifyText("Italian court convicts three Egyptian agents for kidnap of Giulio Regeni")?.category).toBe("crime");
     expect(classifyText("Kill jackie catherine zeta jones comeback vehicle crashes and burns")?.score ?? 0).toBeLessThan(MIN_TEXT_SCORE);
     expect(classifyText("Vaccine trial shows promise")?.score ?? 0).toBeLessThan(MIN_TEXT_SCORE);
     // "firefight" must not match inside "Firefighter".

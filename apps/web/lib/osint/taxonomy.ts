@@ -156,7 +156,7 @@ const RULES: Array<[RegExp, Category, number]> = [
   [/\b(wars?|wartime)\b/i, "conflict", 1],
   [/\b(kill(?:s|ed|ing)?|dead|deaths?|injur(?:es|ed|ing)|wounded|casualt\w*)\b/i, "conflict", 1],
   [/\b(suicide bomb\w*|car bomb|explosion|blast|terror\w*|gunm[ae]n|hostages?|kidnap\w*|abduct\w*|assassinat\w*|massacre|detained|coup|militia\w*|insurgen\w*|jihadis\w*|extremists?)\b/i, "security", 3],
-  [/\b(murder\w*|homicides?|robber(?:s|y|ies)?|burglar\w*|shootings?|shot dead|stabb\w*|gangs?|cartels?|drug (?:bust|lord|traffick\w*)|trafficking|smuggl\w*|carjack\w*|heist|manhunt|police (?:say|said|arrest\w*)|arrested|charged with|serial killer|jury|sentenc(?:e|es|ed|ing)|convicted|prosecutors?|felon\w*|theft|stolen|indict\w*|detectives?|sheriff)\b/i, "crime", 3],
+  [/\b(murder\w*|homicides?|robber(?:s|y|ies)?|burglar\w*|shootings?|shot dead|stabb\w*|gangs?|cartels?|drug (?:bust|lord|traffick\w*)|trafficking|smuggl\w*|carjack\w*|heist|manhunt|police (?:say|said|arrest\w*)|arrested|charged with|serial killer|jury|sentenc(?:e|es|ed|ing)|convict(?:s|ed)?|prosecutors?|felon\w*|theft|stolen|indict\w*|detectives?|sheriff)\b/i, "crime", 3],
   // Legal words tip a kidnapping or bombing *trial* from security to crime,
   // but alone ("Supreme Court ruling") are not enough to make an event.
   [LEGAL_VOCAB, "crime", 1],
