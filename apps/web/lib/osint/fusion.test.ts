@@ -1,0 +1,48 @@
+import { describe, expect, it } from "vitest";
+import { fuse, headlineWords, sameStory } from "./fusion";
+import type { Signal } from "./types";
+
+const T = Date.UTC(2026, 8, 28, 12);
+
+function wire(o: Partial<Signal> & { headline: string; lat: number; lon: number }): Signal {
+  return {
+    key: `wire:${o.headline}`,
+    source: "wire",
+    category: "conflict",
+    title: o.headline,
+    precision: "region",
+    place: "",
+    country: "MM",
+    time: T,
+    severity: 0.7,
+    quality: 0.8,
+    reports: 1,
+    ...o,
+  };
+}
+
+describe("same-story fusion", () => {
+  it("matches reworded headlines about one event", () => {
+    const a = headlineWords("Myanmar airstrike kills 33 in Rohingya majority Rakhine State");
+    const b = headlineWords("At least 33 killed after Myanmar military air strike hits market");
+    expect(sameStory(a, b)).toBe(true);
+    expect(sameStory(a, headlineWords("Myanmar junta announces election date"))).toBe(false);
+  });
+
+  it("folds a country-level report into the located incident it describes", () => {
+    const incidents = fuse([
+      wire({ headline: "Myanmar airstrike kills 33 in Rohingya majority Rakhine State", lat: 20.1, lon: 93.0, precision: "region" }),
+      wire({ headline: "At least 33 killed after Myanmar military air strike hits market", lat: 21.9, lon: 95.9, precision: "country", time: T - 3_600_000 }),
+    ]);
+    expect(incidents).toHaveLength(1);
+    expect(incidents[0].precision).toBe("region");
+  });
+
+  it("never merges two precisely located events on wording alone", () => {
+    const incidents = fuse([
+      wire({ headline: "Russian drone strike kills 3 in Kharkiv", lat: 49.99, lon: 36.23, country: "UA", precision: "city" }),
+      wire({ headline: "Russian drone strike kills 3 in Odesa", lat: 46.48, lon: 30.72, country: "UA", precision: "city" }),
+    ]);
+    expect(incidents).toHaveLength(2);
+  });
+});

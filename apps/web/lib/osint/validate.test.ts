@@ -30,6 +30,12 @@ describe("validation primitives", () => {
     expect(safeUrl("not a url")).toBeUndefined();
   });
 
+  it("drops numeric ids glued to the first slug word", () => {
+    expect(headlineFromUrl("https://x.example/news/26588657.men-arrested-suspected-terror-plot-released-bail")).toBe(
+      "Men arrested suspected terror plot released bail",
+    );
+  });
+
   it("turns a news slug into a headline and restores known names", () => {
     expect(headlineFromUrl("https://x.com/2026/09/28/russian-drone-strike-hits-kharkiv-apartment-block.html", ["Kharkiv"])).toBe(
       "Russian drone strike hits Kharkiv apartment block",

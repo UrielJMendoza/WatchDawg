@@ -36,7 +36,9 @@ describe("headline vocabulary", () => {
     expect(classifyText("Seoul summons Ukraine envoy over North Korean prisoner-of-war row")?.category).toBe("tension");
     expect(LEGAL_VOCAB.test("Rome court sentences 3 Egyptian security officials over abduction")).toBe(true);
     // Rulings and clinical trials are not crime.
-    expect(classifyText("Supreme Court ruling on tariffs expected")).toBeNull();
-    expect(classifyText("Vaccine trial shows promise")).toBeNull();
+    expect(classifyText("Supreme Court ruling on tariffs expected")?.score ?? 0).toBeLessThan(MIN_TEXT_SCORE);
+    expect(classifyText("3 Egyptian Officials Convicted of Kidnapping Slain Italian Student")?.category).toBe("crime");
+    expect(classifyText("Kill jackie catherine zeta jones comeback vehicle crashes and burns")?.score ?? 0).toBeLessThan(MIN_TEXT_SCORE);
+    expect(classifyText("Vaccine trial shows promise")?.score ?? 0).toBeLessThan(MIN_TEXT_SCORE);
   });
 });

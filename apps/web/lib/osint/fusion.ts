@@ -90,6 +90,46 @@ interface Draft {
   lastSeen: number;
   sources: Set<SourceId>;
   keys: Set<string>;
+  /** Content words of the anchoring headline, for same-story matching. */
+  words?: Set<string>;
+}
+
+const STOP = new Set([
+  "the", "and", "for", "after", "with", "from", "into", "over", "says", "said", "least", "more", "than",
+  "amid", "near", "about", "report", "new", "its", "has", "have", "are", "was", "were", "who", "that",
+  "this", "what", "how", "why", "latest", "live", "update", "news", "photos", "video", "watch",
+]);
+
+/** Content words of a headline, lightly stemmed ("kills"/"killed" → "kill"). */
+export function headlineWords(text: string | undefined): Set<string> {
+  const out = new Set<string>();
+  if (!text) return out;
+  const norm = text.toLowerCase().replace(/\bair strike/g, "airstrike");
+  for (let w of norm.split(/[^a-z0-9]+/)) {
+    if (!w || STOP.has(w) || (w.length < 3 && !/^\d+$/.test(w))) continue;
+    if (w.length > 5 && w.endsWith("ing")) w = w.slice(0, -3);
+    else if (w.length > 4 && w.endsWith("ed")) w = w.slice(0, -2);
+    else if (w.length > 3 && w.endsWith("s") && !w.endsWith("ss")) w = w.slice(0, -1);
+    out.add(w);
+  }
+  return out;
+}
+
+/**
+ * Two headlines tell the same story: at least three shared content words
+ * covering most of the shorter one, including a number (a toll, a count)
+ * or a fourth word.
+ */
+export function sameStory(a: Set<string>, b: Set<string>): boolean {
+  if (a.size < 3 || b.size < 3) return false;
+  let shared = 0;
+  let numeric = false;
+  for (const w of a) {
+    if (!b.has(w)) continue;
+    shared++;
+    if (/^\d+$/.test(w)) numeric = true;
+  }
+  return shared >= 3 && shared / Math.min(a.size, b.size) >= 0.45 && (numeric || shared >= 4);
 }
 
 function ruleFor(d: { family: Family; precision: GeoPrecision }) {
@@ -235,6 +275,9 @@ function finalize(d: Draft): Incident {
 export function fuse(signals: Signal[]): Incident[] {
   const CELL = 2; // degrees; neighbour scan covers ±2° ≈ 220 km, wider rules also check a ring
   const grid = new Map<string, Draft[]>();
+  // Human-domain drafts by family and country, for same-story matching of
+  // country-level reports that the distance rules can't reach.
+  const byCountry = new Map<string, Draft[]>();
   const drafts: Draft[] = [];
   const ordered = [...signals].sort(
     (a, b) =>
@@ -259,6 +302,21 @@ export function fuse(signals: Signal[]): Incident[] {
         }
       }
     }
+    const human = !NATURAL.has(family) && !!s.country;
+    const words = human ? headlineWords(s.headline) : undefined;
+    if (!best && words && words.size) {
+      // A report that only names the country can join the incident it
+      // describes elsewhere in that country; two precise fixes never merge
+      // on wording alone (two strikes, two cities, same phrasing).
+      for (const d of byCountry.get(`${family}|${s.country}`) ?? []) {
+        if (d.keys.has(s.key) || (s.precision !== "country" && d.precision !== "country")) continue;
+        if (Math.abs(s.time - d.lastSeen) > RULES.humanRegion.gapMs) continue;
+        if (d.words && sameStory(words, d.words)) {
+          best = d;
+          break;
+        }
+      }
+    }
     if (best) {
       best.signals.push(s);
       best.sources.add(s.source);
@@ -277,8 +335,15 @@ export function fuse(signals: Signal[]): Incident[] {
       lastSeen: s.time,
       sources: new Set([s.source]),
       keys: new Set([s.key]),
+      words,
     };
     drafts.push(d);
+    if (human) {
+      const k = `${family}|${s.country}`;
+      const list = byCountry.get(k);
+      if (list) list.push(d);
+      else byCountry.set(k, [d]);
+    }
     // Register in both the fine and the wide grid so either kind of lookup finds it.
     const fine = cellKey(s.lat, s.lon, CELL);
     const coarse = `w${cellKey(s.lat, s.lon, CELL * 2)}`;

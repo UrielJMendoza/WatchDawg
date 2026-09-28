@@ -145,14 +145,21 @@ export function cameo(
  * Keyword classifier for free-text headlines. Each rule adds weight to a
  * category; the heaviest wins. Returns null when nothing matches.
  */
+/** Court reporting: a violence-coded event whose headline is about a trial is crime. */
+export const LEGAL_VOCAB =
+  /\b(court|sentenc(?:e|es|ed|ing)|convict(?:s|ed|ion)?|jury|trial|prosecut\w*|indict\w*|charged|pleads?|guilty|acquit\w*|verdict)\b/i;
+
 const RULES: Array<[RegExp, Category, number]> = [
-  [/\b(air ?strikes?|missiles?|drones? (?:attack|strike)|shelling|artillery|airstrike|bombard\w*|offensive|frontline|troops? (?:advance|killed)|killed in (?:fighting|clashes)|clashes?|firefight|gunfire|rockets?|incursion|invasion|militants? killed|strikes? (?:on|against|hit\w*|kill\w*|downtown))/i, "conflict", 3],
+  [/\b(air ?strikes?|missiles?|drones? (?:attack|strike)|shelling|artillery|airstrike|bombard\w*|offensive|frontline|troops? (?:advance|killed)|killed in (?:fighting|clashes)|clashes?|firefight|gunfire|rockets?|incursion|invasion|militants? killed|strikes? (?:on|against|hit\w*|kill\w*|downtown)|fighting|fighters|exchang\w* (?:of )?fire|open(?:s|ed)? fire)/i, "conflict", 3],
   // Weak cues: "war" alone is mostly commentary ("Pope touches on war"), and
   // casualty words also appear in crime and disasters. Together they count.
   [/\b(wars?|wartime)\b/i, "conflict", 1],
   [/\b(kill(?:s|ed|ing)?|dead|deaths?|injur(?:es|ed|ing)|wounded|casualt\w*)\b/i, "conflict", 1],
   [/\b(suicide bomb\w*|car bomb|explosion|blast|terror\w*|gunm[ae]n|hostages?|kidnap\w*|abduct\w*|assassinat\w*|massacre|detained|coup|militia\w*|insurgen\w*|jihadis\w*|extremists?)\b/i, "security", 3],
   [/\b(murder\w*|homicides?|robber(?:s|y|ies)?|burglar\w*|shootings?|shot dead|stabb\w*|gangs?|cartels?|drug (?:bust|lord|traffick\w*)|trafficking|smuggl\w*|carjack\w*|heist|manhunt|police (?:say|said|arrest\w*)|arrested|charged with|serial killer|jury|sentenc(?:e|es|ed|ing)|convicted|prosecutors?|felon\w*|theft|stolen|indict\w*|detectives?|sheriff)\b/i, "crime", 3],
+  // Legal words tip a kidnapping or bombing *trial* from security to crime,
+  // but alone ("Supreme Court ruling") are not enough to make an event.
+  [LEGAL_VOCAB, "crime", 1],
   [/\b(protests?|protesters?|demonstrat\w*|riots?|rally|rallies|march(?:es|ed)? (?:against|for)|strike action|walkout|unrest|tear gas|crackdown)\b/i, "unrest", 3],
   [/\b(threat\w*|warns?|warning|sanction\w*|tensions?|ultimatum|mobili[sz]\w*|military drills?|exercises|standoff|expel\w*|summon\w*|embargo)\b/i, "tension", 2],
   [/\b(talks|summit|agreement|deal|treaty|ceasefire|truce|negotiat\w*|diplomat\w*|election\w*|vote|minister visits?|meets? with|accord)\b/i, "diplomacy", 2],
@@ -188,10 +195,6 @@ export function classifyText(text: string): { category: Category; score: number 
  */
 export const VIOLENCE_VOCAB =
   /\b(kill(?:s|ed|ing)?|wounded|injur\w*|casualt\w*|attack\w*|air ?strikes?|strikes? (?:on|against|hit\w*)|bomb(?:s|ed|ing|ings|er|ers)?|blasts?|explo(?:sion|sions|sive|sives|ded)|shell(?:ing|ed|s)|missiles?|rockets?|drones?|artillery|gunfire|exchang\w* (?:of )?fire|open(?:s|ed|ing)? fire|cross-?fire|gunm[ae]n|shoot(?:ing|ings|out)|shot (?:dead|down)|stabb\w*|fighting|firefight|clash(?:es|ed)|troops?|soldiers?|militants?|militia\w*|raid(?:s|ed)?|ambush\w*|siege|offensive|invasion|front ?line|warfare|hostages?|kidnap\w*|abduct\w*|assassinat\w*|massacre|murder\w*|homicide|terror\w*|insurgen\w*|rebels?|jihadis\w*|coup|riot\w*|executed|torture\w*|gunmen|armed (?:men|group|attack|robbery|forces))\b/i;
-
-/** Court reporting: a violence-coded event whose headline is about a trial is crime. */
-export const LEGAL_VOCAB =
-  /\b(court|sentenc(?:e|es|ed|ing)|convict(?:s|ed|ion)?|jury|trial|prosecut\w*|indict\w*|charged|pleads?|guilty|acquit\w*|verdict)\b/i;
 
 /** Minimum classifier score for a newsroom headline to count as an event. */
 export const MIN_TEXT_SCORE = 2;

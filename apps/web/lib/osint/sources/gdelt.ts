@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { unzipSync } from "fflate";
 import type { Category, GeoPrecision, Signal } from "../types";
-import { CAMEO_ROOTS_KEPT, LEGAL_VOCAB, VIOLENCE_VOCAB, cameo, classifyText, domainOf } from "../taxonomy";
+import { CAMEO_ROOTS_KEPT, LEGAL_VOCAB, MIN_TEXT_SCORE, VIOLENCE_VOCAB, cameo, classifyText, domainOf } from "../taxonomy";
 import { countryByIso3, stripDiacritics, type GazetteerData } from "../gazetteer";
 import {
   checkCoords,
@@ -279,6 +279,8 @@ function topActors(rows: Row[]): string[] {
     .map(([a]) => titleCase(a));
 }
 
+const VIOLENT = new Set<Category>(["conflict", "security", "crime", "unrest"]);
+
 export function groupsToSignals(
   rows: Row[],
   gaz: GazetteerData,
@@ -308,23 +310,39 @@ export function groupsToSignals(
     // Cross-validate violent coding against the article's own words. CAMEO
     // assigns "assault" to court reporting and "fight" to sports and tax
     // disputes; a headline with no violent vocabulary vetoes the coding.
-    const headline = headlineFromUrl(lead.url, [lead.geoName, ...topActors(g.rows)]);
+    // The lead article's URL may be an opaque id; any well-covered article
+    // in the group can supply the headline (and then becomes the link).
+    const nouns = [lead.geoName, ...topActors(g.rows)];
+    let src = lead;
+    let headline = headlineFromUrl(lead.url, nouns);
+    for (const r of [...g.rows].sort((a, b) => b.articles - a.articles).slice(0, 6)) {
+      if (headline) break;
+      headline = headlineFromUrl(r.url, nouns);
+      if (headline) src = r;
+    }
     let category = lead.category;
     let label = lead.label;
     if (domainOf(lead.category) === "security") {
-      if (headline && !VIOLENCE_VOCAB.test(headline)) {
+      // Violence needs the article's own words to agree: GDELT codes
+      // "military force" for capitals standing in for governments, and
+      // "kill" for film titles.
+      if (!headline) {
+        ledger.filter("evidence.unverifiable");
+        continue;
+      }
+      const cls = classifyText(headline);
+      if (!VIOLENCE_VOCAB.test(headline) || !cls || cls.score < MIN_TEXT_SCORE || !VIOLENT.has(cls.category)) {
         ledger.filter("relevance.headline_mismatch");
         continue;
       }
       // Violence claims need two independent outlets: single-outlet local
       // stories are GDELT's biggest source of false alarms.
-      // Without a headline to check the coding against, ask for three.
-      if (g.outlets.size < (headline ? 2 : 3)) {
-        ledger.filter(headline ? "evidence.single_outlet" : "evidence.unverifiable");
+      if (g.outlets.size < 2) {
+        ledger.filter("evidence.single_outlet");
         continue;
       }
       // Courts, robberies and murders are crime, not war.
-      if (headline && (LEGAL_VOCAB.test(headline) || classifyText(headline)?.category === "crime")) {
+      if (LEGAL_VOCAB.test(headline) || cls.category === "crime") {
         category = "crime";
         label = "Crime report";
       }
@@ -338,8 +356,8 @@ export function groupsToSignals(
       category,
       title: `${label} — ${place}`,
       headline,
-      url: lead.url,
-      outlet: lead.outlet,
+      url: src.url,
+      outlet: src.outlet,
       lat: lead.lat,
       lon: lead.lon,
       precision,

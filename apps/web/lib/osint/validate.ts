@@ -134,7 +134,8 @@ export function headlineFromUrl(url: string | undefined, properNouns: string[] =
   }
   if (!best) return undefined;
   const words = best
-    .split(/[-_+]+/)
+    // "26588657.men-arrested-…": ids glued to the first word with a dot.
+    .split(/[-_+]+|(?<=\d)\.(?=[a-z])/i)
     .filter((w) => w && !/^\d{5,}$/.test(w) && !/^[0-9a-f]{8,}$/i.test(w) && !/^(amp|html|index|article|story|news)$/i.test(w));
   const alpha = words.filter((w) => /^[a-z']+$/i.test(w));
   if (alpha.length < 4 || alpha.length / words.length < 0.7) return undefined;
